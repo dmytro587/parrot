@@ -207,7 +207,7 @@ public enum Daemon {
             Log.info("loading \(model.id)…")
             if model.engine == .phonon {
                 Log.info(
-                    "Phonon-2: starting local fermion serve (often 30–60s). Parrot is running; wait for “hold … to dictate” before pressing the hotkey."
+                    "Phonon-2: starting local fermion serve (often ~60s on first load). Wait until you see “model: phonon-2 · … · ^C to quit” before using the hotkey."
                 )
             }
         }

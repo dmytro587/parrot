@@ -13,8 +13,6 @@ package actor PhononServer {
   private var process: Process?
   private var baseURL: URL?
   private var owned = false
-  private var drainStdout: FileHandle?
-  private var drainStderr: FileHandle?
 
   package func start(modelID: String) async throws -> URL {
     if let external = Self.externalServiceURL, !external.isEmpty {
@@ -35,11 +33,16 @@ package actor PhononServer {
     }
 
     let cache = try PhononModelStore.cacheRoot()
+    try Paths.prepareDirectory(Paths.logs)
+    let serveLog = Paths.logs.appendingPathComponent("fermion-serve-live.log")
+    FileManager.default.createFile(atPath: serveLog.path, contents: nil)
+    let serveLogHandle = try FileHandle(forWritingTo: serveLog)
+    try serveLogHandle.truncate(atOffset: 0)
+
     var environment = ProcessInfo.processInfo.environment
     environment["FERMION_CACHE_DIR"] = cache.path
+    environment["PYTHONUNBUFFERED"] = "1"
 
-    let stdoutPipe = Pipe()
-    let stderrPipe = Pipe()
     let child = Process()
     child.executableURL = PhononSupport.locateFermion()
     child.arguments = ["serve", modelID, "--host", "127.0.0.1", "--port", "0"]
@@ -47,88 +50,70 @@ package actor PhononServer {
       child.arguments?.append(contentsOf: ["--api-key", key])
     }
     child.environment = environment
-    child.standardOutput = stdoutPipe
-    child.standardError = stderrPipe
-
-    var stderrAccumulator = Data()
-    var stdoutLineBuffer = ""
-    var detectedPort: Int?
+    child.standardOutput = FileHandle.nullDevice
+    child.standardError = serveLogHandle
 
     try child.run()
 
     let startupTimeout = PhononConfiguration.defaultStartupTimeout
     let deadline = Date().addingTimeInterval(startupTimeout)
     var lastStatusLog = Date.distantPast
+    var lastPortLog = Date.distantPast
 
     while Date() < deadline {
       if Date().timeIntervalSince(lastStatusLog) >= 10 {
         Log.info("starting fermion serve for \(modelID)…")
         lastStatusLog = Date()
       }
-      if !child.isRunning, detectedPort == nil {
-        stderrAccumulator.append(stderrPipe.fileHandleForReading.availableData)
-        PhononSupport.saveServeDiagnostics(stderrAccumulator)
+
+      if !child.isRunning {
+        try? serveLogHandle.close()
+        if let log = try? Data(contentsOf: serveLog) {
+          PhononSupport.saveServeDiagnostics(log)
+        }
         throw PhononError.weightsMissing(
           Self.serveFailedMessage(exit: child.terminationStatus, logHint: true))
       }
 
-      let outChunk = stdoutPipe.fileHandleForReading.availableData
-      if !outChunk.isEmpty, let text = String(data: outChunk, encoding: .utf8) {
-        stdoutLineBuffer += text
-        while let newline = stdoutLineBuffer.firstIndex(of: "\n") {
-          let line = String(stdoutLineBuffer[..<newline])
-          stdoutLineBuffer.removeSubrange(...newline)
-          if detectedPort == nil, let port = PhononSupport.parseServePort(from: line) {
-            detectedPort = port
-          }
-        }
+      guard let port = PhononSupport.discoverListeningPort(processID: child.processIdentifier)
+      else {
+        try await Task.sleep(nanoseconds: 500_000_000)
+        continue
       }
 
-      let errChunk = stderrPipe.fileHandleForReading.availableData
-      if !errChunk.isEmpty {
-        stderrAccumulator.append(errChunk)
+      if Date().timeIntervalSince(lastPortLog) >= 15 {
+        Log.info("phonon: fermion listening on 127.0.0.1:\(port), waiting for health…")
+        lastPortLog = Date()
       }
 
-      if let port = detectedPort {
-        let urlString = "http://127.0.0.1:\(port)"
-        let configuration = try PhononConfiguration(
-          urlString: urlString, modelID: modelID, apiKey: PhononRuntime.apiKey)
-        let adapter = PhononHTTPAdapter(configuration: configuration)
-        do {
-          try await adapter.checkHealth()
-          Self.startDraining(
-            stdout: stdoutPipe.fileHandleForReading,
-            stderr: stderrPipe.fileHandleForReading,
-            storeStdout: &drainStdout,
-            storeStderr: &drainStderr
-          )
-          process = child
-          baseURL = configuration.baseURL
-          owned = true
-          return configuration.baseURL
-        } catch {
-          // Model still loading; keep polling until deadline.
-        }
+      let urlString = "http://127.0.0.1:\(port)"
+      let configuration = try PhononConfiguration(
+        urlString: urlString, modelID: modelID, apiKey: PhononRuntime.apiKey)
+      let adapter = PhononHTTPAdapter(configuration: configuration)
+      do {
+        try await adapter.checkHealth()
+        try? serveLogHandle.close()
+        process = child
+        baseURL = configuration.baseURL
+        owned = true
+        Log.info("phonon: fermion ready on \(urlString)")
+        return configuration.baseURL
+      } catch {
+        try await Task.sleep(nanoseconds: 500_000_000)
       }
-
-      try await Task.sleep(nanoseconds: 200_000_000)
     }
 
-    stderrAccumulator.append(stderrPipe.fileHandleForReading.availableData)
-    PhononSupport.saveServeDiagnostics(stderrAccumulator)
+    try? serveLogHandle.close()
+    if let log = try? Data(contentsOf: serveLog) {
+      PhononSupport.saveServeDiagnostics(log)
+    }
     child.terminate()
     throw PhononError.weightsMissing(
-      "fermion serve did not become ready within \(Int(startupTimeout))s"
-        + (stderrAccumulator.isEmpty ? "" : "; see ~/Library/Logs/parrot/fermion-serve-last.log")
+      "fermion serve did not become ready within \(Int(startupTimeout))s; see ~/Library/Logs/parrot/fermion-serve-last.log"
     )
   }
 
   package func stop() async {
-    drainStdout?.readabilityHandler = nil
-    drainStderr?.readabilityHandler = nil
-    drainStdout = nil
-    drainStderr = nil
-
     guard owned, let process else {
       baseURL = nil
       return
@@ -161,23 +146,5 @@ package actor PhononServer {
       message += "; see ~/Library/Logs/parrot/fermion-serve-last.log"
     }
     return message
-  }
-
-  private static func startDraining(
-    stdout: FileHandle,
-    stderr: FileHandle,
-    storeStdout: inout FileHandle?,
-    storeStderr: inout FileHandle?
-  ) {
-    let drain: (FileHandle) -> Void = { handle in
-      handle.readabilityHandler = { h in
-        let data = h.availableData
-        if data.isEmpty { h.readabilityHandler = nil }
-      }
-    }
-    drain(stdout)
-    drain(stderr)
-    storeStdout = stdout
-    storeStderr = stderr
   }
 }

@@ -56,10 +56,42 @@ package enum PhononSupport {
     }
 
     package static func parseServePort(from line: String) -> Int? {
-        guard let host = line.range(of: "http://127.0.0.1:") else { return nil }
-        let rest = line[host.upperBound...]
-        let digits = rest.prefix(while: \.isNumber)
-        guard !digits.isEmpty else { return nil }
-        return Int(digits)
+        parseLoopbackTCPPort(from: line)
+    }
+
+    /// Port from fermion log lines (`http://127.0.0.1:…`) or `lsof` (`127.0.0.1:…` / `localhost:…`).
+    package static func parseLoopbackTCPPort(from line: String) -> Int? {
+        for prefix in ["http://127.0.0.1:", "127.0.0.1:", "localhost:"] {
+            guard let host = line.range(of: prefix) else { continue }
+            let rest = line[host.upperBound...]
+            let digits = rest.prefix(while: \.isNumber)
+            if !digits.isEmpty, let port = Int(digits) { return port }
+        }
+        return nil
+    }
+
+    /// When fermion stderr is buffered, discover the loopback port from the child process.
+    package static func discoverListeningPort(processID: Int32) -> Int? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-nP", "-a", "-p", String(processID), "-iTCP", "-sTCP:LISTEN"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let output =
+            String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(whereSeparator: \.isNewline) {
+            if let port = parseLoopbackTCPPort(from: String(line)) {
+                return port
+            }
+        }
+        return nil
     }
 }

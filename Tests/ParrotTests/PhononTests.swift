@@ -66,6 +66,17 @@ final class PhononSupportTests: XCTestCase {
     func testParseServePortIgnoresUnrelatedLines() {
         XCTAssertNil(PhononSupport.parseServePort(from: "[fermion] decode backend: mlx"))
     }
+
+    func testParseServePortFromStderrStyleLine() {
+        let line =
+            "[fermion] OpenAI-compatible: set base_url=http://127.0.0.1:59747/v1 (api key: any)"
+        XCTAssertEqual(PhononSupport.parseServePort(from: line), 59_747)
+    }
+
+    func testParseLoopbackPortFromLsofLine() {
+        let line = "Python 5814 beeshop 4u IPv4 0x0 TCP localhost:60019 (LISTEN)"
+        XCTAssertEqual(PhononSupport.parseLoopbackTCPPort(from: line), 60_019)
+    }
 }
 
 final class PhononModelStoreLayoutTests: XCTestCase {

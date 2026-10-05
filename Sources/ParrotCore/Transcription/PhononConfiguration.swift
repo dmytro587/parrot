@@ -4,7 +4,8 @@ import Foundation
 package struct PhononConfiguration {
     /// Fermion caps upload bodies at 32 MiB.
     package static let defaultMaximumWAVBytes = 32 * 1024 * 1024
-    package static let defaultStartupTimeout: TimeInterval = 120
+    /// First MLX load of Phonon-2 often needs ~60s before `fermion` listens on loopback.
+    package static let defaultStartupTimeout: TimeInterval = 180
 
     let baseURL: URL
     let modelID: String
