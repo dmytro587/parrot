@@ -57,13 +57,16 @@ package actor PhononServer {
 
     let startupTimeout = PhononConfiguration.defaultStartupTimeout
     let deadline = Date().addingTimeInterval(startupTimeout)
-    var lastStatusLog = Date.distantPast
+    let loadStarted = Date()
+    var lastProgressLog = Date.distantPast
     var lastPortLog = Date.distantPast
+    Log.info("starting fermion serve for \(modelID)…")
 
     while Date() < deadline {
-      if Date().timeIntervalSince(lastStatusLog) >= 10 {
-        Log.info("starting fermion serve for \(modelID)…")
-        lastStatusLog = Date()
+      let elapsed = Int(Date().timeIntervalSince(loadStarted))
+      if Date().timeIntervalSince(lastProgressLog) >= 15 {
+        Log.info("loading Phonon (~\(elapsed)s, MLX model; first start is often ~60s)…")
+        lastProgressLog = Date()
       }
 
       if !child.isRunning {
