@@ -91,7 +91,7 @@ package enum PhononModelStore {
     }
 
     /// The Hugging Face archive is flat; Fermion reads `…/model_phonon2_c4c_int6/`.
-    private static func normalizeLayout(in repoDir: URL) throws {
+    package static func normalizeLayout(in repoDir: URL) throws {
         let nested = repoDir.appendingPathComponent(unpackDirName, isDirectory: true)
         if hasManifests(in: nested) { return }
         guard hasManifests(in: repoDir) else { return }
@@ -108,9 +108,14 @@ package enum PhononModelStore {
     }
 
     private static func verifyArchive(at url: URL) throws {
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        let digest = SHA256.hash(data: data)
-        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            guard let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty else { break }
+            hasher.update(data: chunk)
+        }
+        let hex = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         guard hex == archiveSHA256 else {
             throw PhononError.weightsMissing(
                 "download digest mismatch (expected \(archiveSHA256.prefix(8))…)")

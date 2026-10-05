@@ -24,7 +24,29 @@ public enum DoctorReport {
         var checks = [checkMicrophone(), checkAccessibility()]
         if key == .fn { checks.append(checkFnKeyMapping()) }
         checks.append(checkModelCache())
+        let modelID = MainActor.assumeIsolated { SettingsStore().current.model.id }
+        if Self.usesPhonon(modelID: modelID) {
+            checks.append(checkFermionCLI())
+        }
         return checks
+    }
+
+    static func usesPhonon(modelID: String?) -> Bool {
+        let model = modelID.flatMap(ModelRegistry.find) ?? ModelRegistry.recommended()
+        return model?.engine == .phonon
+    }
+
+    static func checkFermionCLI() -> Check {
+        let name = "phonon runtime (fermion)"
+        if PhononSupport.isFermionAvailable {
+            return Check(name: name, status: .ok, remediation: nil)
+        }
+        return Check(
+            name: name,
+            status: .fail("`fermion` not found on PATH"),
+            remediation:
+                "python3.12 -m pip install --user fermion-research mlx mlx-audio mlx-lm soundfile scipy zstandard; put ~/.local/bin on PATH"
+        )
     }
 
     /// Models belong in Application Support. ~/Documents is unreadable from
@@ -37,7 +59,8 @@ public enum DoctorReport {
             return Check(
                 name: name,
                 status: .warn("resolves to \(resolved), under ~/Documents or iCloud"),
-                remediation: "make \(Paths.appSupport.path) a real folder, then `parrot models download <id>`"
+                remediation:
+                    "make \(Paths.appSupport.path) a real folder, then `parrot models download <id>`"
             )
         }
         if WhisperKitTranscriber.hasLegacyModels() {
@@ -65,7 +88,8 @@ public enum DoctorReport {
             return Check(
                 name: "microphone",
                 status: .fail("denied"),
-                remediation: "System Settings → Privacy & Security → Microphone → enable for your terminal"
+                remediation:
+                    "System Settings → Privacy & Security → Microphone → enable for your terminal"
             )
         @unknown default:
             return Check(name: "microphone", status: .fail("unknown state"), remediation: nil)
@@ -80,7 +104,8 @@ public enum DoctorReport {
         return Check(
             name: "accessibility",
             status: .fail("not granted"),
-            remediation: "System Settings → Privacy & Security → Accessibility → enable for \(parent)"
+            remediation:
+                "System Settings → Privacy & Security → Accessibility → enable for \(parent)"
         )
     }
 
@@ -158,7 +183,10 @@ public enum DoctorReport {
         }
         task.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else {
+        guard
+            let s = String(data: data, encoding: .utf8)?.trimmingCharacters(
+                in: .whitespacesAndNewlines), !s.isEmpty
+        else {
             return nil
         }
         return (s as NSString).lastPathComponent

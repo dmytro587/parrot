@@ -4,6 +4,7 @@ import Foundation
 package struct PhononConfiguration {
     /// Fermion caps upload bodies at 32 MiB.
     package static let defaultMaximumWAVBytes = 32 * 1024 * 1024
+    package static let defaultStartupTimeout: TimeInterval = 120
 
     let baseURL: URL
     let modelID: String
@@ -16,7 +17,7 @@ package struct PhononConfiguration {
         urlString: String,
         modelID: String,
         apiKey: String? = nil,
-        startupTimeout: TimeInterval = 120,
+        startupTimeout: TimeInterval = PhononConfiguration.defaultStartupTimeout,
         transcriptionTimeout: TimeInterval = 120,
         maximumWAVBytes: Int = PhononConfiguration.defaultMaximumWAVBytes
     ) throws {
@@ -48,6 +49,9 @@ package struct PhononConfiguration {
 }
 
 /// Optional override for an external loopback server (advanced).
+///
+/// ``PhononServer/shared`` is the only serve child Parrot owns. These overrides and
+/// `PARROT_PHONON_URL` apply process-wide until the next `apply` or restart.
 package enum PhononRuntime {
     package private(set) static var apiKey: String?
 

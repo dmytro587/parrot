@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: `2026.09.28`
+Last updated: `2026.10.06`
 
 > This document is the target structure. Contributors and agents working on an issue read it first: it says where each kind of change belongs, so parallel work composes instead of colliding.
 
@@ -28,11 +28,11 @@ Parrot is a macOS menu-bar dictation app. Hold a key, speak, release, and the tr
 ### 1.1 — Goals
 
 1. **Push-to-talk dictation into any app.** Hold a hotkey, speak, release, and the text lands in the focused field.
-2. **On-device.** No network calls for transcription. Audio never leaves the machine.
+2. **On-device.** No network calls for transcription. Audio never leaves the machine. Model weights may download once from Hugging Face (or PyPI for the Phonon Fermion CLI); dictation itself does not use the network.
 3. **Minimal surface.** A menu-bar item, a small recording pill, and one settings window. No dock icon, no main window.
 4. **Your words.** A custom dictionary biases the model toward the names and terms you use, and fixes what it still gets wrong.
 5. **Trustworthy by construction.** Transcript text is never written to logs or disk. The app is signed and notarized, so permissions survive updates.
-6. **Pluggable engines.** Whisper (WhisperKit) today, Parakeet and Apple SpeechAnalyzer behind the same protocol.
+6. **Pluggable engines.** Whisper (WhisperKit), Cactus Whistle (Needle), Phonon-2 (Fermion MLX over loopback HTTP), and future engines behind the same protocol.
 
 ### 1.2 — Non-goals
 
@@ -100,6 +100,12 @@ Sources/ParrotCore/
     WhisperKitTranscriber.swift
     WhistleTranscriber.swift    Cactus Whistle via the Needle engine (`whistle.cact`)
     NeedleRuntime.swift         serializes the process-global Needle C API
+    PhononTranscriber.swift     Phonon-2 via loopback `fermion serve` (MLX on Apple silicon)
+    PhononServer.swift          starts/stops the Fermion child; `--port 0`, parses bind URL from stdout
+    PhononHTTPAdapter.swift     OpenAI-compatible `/v1/audio/transcriptions` on loopback only
+    PhononModelStore.swift      downloads Phonon-2 weights into Application Support / Fermion cache layout
+    PhononConfiguration.swift   loopback URL validation, errors, `PhononRuntime` overrides
+    PhononSupport.swift           locates `fermion` on disk; serve failure logs under `~/Library/Logs/parrot/`
     TranscriberFactory.swift    picks the engine from `TranscriptionModel.engine`
     WhisperTuning.swift         compute units and decoding options, each measured with `parrot-bench transcription`
     SpokenLanguage.swift        the language each dictation decodes in: the setting, or detection among the user's languages (pure, tested)
@@ -172,6 +178,8 @@ HotkeyMonitor ──flags──▶ Gesture ──start/stop──▶ DictationCo
 
 `DictationController` owns the state machine (`idle`, `recording`, `transcribing`) and nothing else. It is `@MainActor`. Transcription runs off the main actor; the controller awaits it.
 
+**Phonon-2** differs from in-process engines: Parrot downloads weights, spawns `fermion serve phonon-2 --port 0` on loopback, and POSTs WAV data to the local HTTP API. Inference runs in the Fermion process (MLX), not inside the Swift binary. One `PhononServer.shared` child per loaded Phonon model; `parrot doctor` checks for `fermion` when Phonon is selected.
+
 ### 4.2 — Extension points
 
 Features plug in at one of these points. They do not add branches to `DictationController`.
@@ -198,8 +206,8 @@ Every location comes from `Paths`. No other code builds a path.
 | Location | Contents |
 |---|---|
 | `~/.config/parrot/` | `settings.json`, `dictionary` (a plain-text table; see [dictionary.md](dictionary.md)): what the user edits and may keep in dotfiles. `$XDG_CONFIG_HOME/parrot/` when that is set |
-| `~/Library/Application Support/parrot/` | `models/`, `stats.json`: downloaded data and machine state |
-| `~/Library/Logs/parrot/` | daemon logs, owner-only; timings and lengths, never transcript text |
+| `~/Library/Application Support/parrot/` | `models/` (WhisperKit, Whistle `.cact`, Fermion/Phonon weights under `models/fermion/`), `stats.json`: downloaded data and machine state |
+| `~/Library/Logs/parrot/` | daemon logs, `fermion-serve-last.log` when Phonon startup fails; timings and lengths, never transcript text |
 | `~/Library/Caches/parrot/` | `--dump-wav` debug captures, owner-only |
 
 Uninstall removes logs and caches. It leaves config and models, so a reinstall keeps the dictionary and does not download the models again.

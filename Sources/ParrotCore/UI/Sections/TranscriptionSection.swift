@@ -28,6 +28,13 @@ struct TranscriptionSection: View {
                         Text(summary(model))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if model.engine == .phonon, !PhononSupport.isFermionAvailable {
+                            Text(
+                                "Install the Fermion CLI (Python 3.10+): `python3.12 -m pip install --user fermion-research …`"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Spacer()

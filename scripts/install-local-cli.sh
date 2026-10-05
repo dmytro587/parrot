@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Build release parrot from this repo and install to PATH.
 # Layout: $PREFIX/parrot + $PREFIX/Sparkle.framework, symlink at $LINK.
+#
+# For Parrot.app (menu bar, signed bundle, /Applications), use scripts/dev-install.sh.
+# This script is for a standalone CLI tree under PREFIX without installing the .app.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -55,3 +55,36 @@ final class PhononHotwordTests: XCTestCase {
         XCTAssertEqual(PhononTranscriber.hotwords(from: ctx), "Parrot, Phonon")
     }
 }
+
+final class PhononSupportTests: XCTestCase {
+    func testParseServePortFromFermionLine() {
+        let line =
+            "[fermion] serving FermionResearch/Phonon-2 (sha 98125795) on http://127.0.0.1:59280/v1"
+        XCTAssertEqual(PhononSupport.parseServePort(from: line), 59_280)
+    }
+
+    func testParseServePortIgnoresUnrelatedLines() {
+        XCTAssertNil(PhononSupport.parseServePort(from: "[fermion] decode backend: mlx"))
+    }
+}
+
+final class PhononModelStoreLayoutTests: XCTestCase {
+    func testNormalizeLayoutMovesFlatUnpackIntoNestedDir() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parrot-phonon-layout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Data("{}".utf8).write(to: root.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: root.appendingPathComponent("packed_manifest.json"))
+
+        try PhononModelStore.normalizeLayout(in: root)
+
+        let nested = root.appendingPathComponent("model_phonon2_c4c_int6", isDirectory: true)
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: nested.appendingPathComponent("config.json").path))
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("config.json").path))
+    }
+}
