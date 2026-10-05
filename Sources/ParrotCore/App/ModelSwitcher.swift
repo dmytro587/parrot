@@ -24,7 +24,8 @@ final class ModelSwitcher {
     private var generation = 0
 
     init(
-        model: TranscriptionModel, transcriber: any ModelLoadingTranscriber, menuBar: MenuBarController,
+        model: TranscriptionModel, transcriber: any ModelLoadingTranscriber,
+        menuBar: MenuBarController,
         status: ModelLoadStatus? = nil
     ) {
         self.model = model
@@ -51,7 +52,11 @@ final class ModelSwitcher {
         }
 
         let generation = self.generation
-        let incoming = TranscriberFactory.make(model: next)
+        guard let incoming = try? TranscriberFactory.make(model: next) else {
+            Log.error("couldn't configure \(next.id); keeping \(model.id)")
+            report(.failed, next, generation)
+            return
+        }
         report(
             TranscriberFactory.isCached(next) ? .loading : .downloading(nil), next, generation)
         Log.info("model: loading \(next.id) behind \(model.id)")

@@ -79,7 +79,7 @@ enum Onboarding {
     /// it keeps following the Mac. The model changes only when it can't hear
     /// the languages: any language besides English on an English-only model
     /// switches to multilingual Small. English only keeps the current model,
-    /// which for a new user is the recommended model (Whistle).
+    /// which for a new user is the recommended model (Phonon-2).
     static func apply(
         hotkey: HotkeyKey,
         languages: [String],

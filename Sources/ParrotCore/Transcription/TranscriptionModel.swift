@@ -3,7 +3,7 @@ import Foundation
 package enum Engine: String, Codable {
     case whisperKit
     case whistle
-    case parakeet
+    case phonon
 }
 
 package struct TranscriptionModel: Codable {

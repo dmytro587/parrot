@@ -15,6 +15,16 @@ package enum ModelRegistry {
             cactArtifact: "whistle.cact",
             sizeMB: 17,
             languages: ["en", "de", "fr", "es", "it", "nl", "pl"],
+            recommended: false
+        ),
+        TranscriptionModel(
+            id: "phonon-2",
+            displayName: "Phonon-2",
+            engine: .phonon,
+            whisperKitID: nil,
+            cactArtifact: nil,
+            sizeMB: 164,
+            languages: ["en"],
             recommended: true
         ),
         TranscriptionModel(

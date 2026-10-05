@@ -28,11 +28,19 @@ struct TranscriptionSection: View {
                         Text(summary(model))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if model.engine == .phonon, !PhononSupport.isFermionAvailable {
+                            Text(
+                                "Install the Fermion CLI: `parrot models install-runtime` (Python 3.10+)"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Spacer()
                 PillMenu(title: selectedModel.map(Self.menuTitle) ?? "None") {
                     modelGroup("Whistle", ModelRegistry.shared.filter { $0.engine == .whistle })
+                    modelGroup("Phonon", ModelRegistry.shared.filter { $0.engine == .phonon })
                     modelGroup(
                         "English",
                         ModelRegistry.shared.filter {
@@ -113,6 +121,7 @@ struct TranscriptionSection: View {
         "whisper-small": "Fast",
         "whisper-large-v3-turbo": "Most accurate, slowest",
         "whistle": "Fastest, smallest",
+        "phonon-2": "Most accurate English",
     ]
 
     /// "Fastest · English only · 145 MB". Not shown while the model loads:
@@ -121,6 +130,8 @@ struct TranscriptionSection: View {
         let languages: String
         if model.engine == .whistle {
             languages = "7 languages"
+        } else if model.engine == .phonon {
+            languages = "English only"
         } else if model.isMultilingual {
             languages = "99 languages"
         } else {

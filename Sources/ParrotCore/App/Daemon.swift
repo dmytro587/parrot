@@ -14,6 +14,9 @@ public struct DaemonOptions {
     public var captureMode: CaptureMode
     /// The push-to-talk key for this run only (#42). Nil uses the saved setting.
     public var hotkey: HotkeyKey?
+    /// Optional loopback URL for an already-running `fermion serve` (advanced). When nil,
+    /// Parrot downloads weights and starts its own server during model load.
+    public var phononURL: String?
 
     public init(
         skipDoctor: Bool,
@@ -23,7 +26,8 @@ public struct DaemonOptions {
         model: String?,
         injectMode: InjectMode = .paste,
         captureMode: CaptureMode = .standard,
-        hotkey: HotkeyKey? = nil
+        hotkey: HotkeyKey? = nil,
+        phononURL: String? = nil
     ) {
         self.skipDoctor = skipDoctor
         self.debugHotkey = debugHotkey
@@ -33,6 +37,7 @@ public struct DaemonOptions {
         self.injectMode = injectMode
         self.captureMode = captureMode
         self.hotkey = hotkey
+        self.phononURL = phononURL
     }
 }
 
@@ -59,7 +64,9 @@ public enum Daemon {
             MicrophoneAccess.requestIfUndetermined()
         }
 
-        let transcriber = TranscriberFactory.make(model: chosenModel)
+        PhononRuntime.apply(
+            url: options.phononURL ?? ProcessInfo.processInfo.environment["PARROT_PHONON_URL"])
+        let transcriber = try TranscriberFactory.make(model: chosenModel)
 
         try MainActor.assumeIsolated {
             try runLoop(
@@ -196,6 +203,14 @@ public enum Daemon {
         // unloaded transcriber. A failed load (offline first run) retries
         // with backoff rather than exiting: the login item does not relaunch.
         menuBar.setHotkeyHealth(.modelLoading)
+        if !AppLaunch.isApp {
+            Log.info("loading \(model.id)…")
+            if model.engine == .phonon {
+                Log.info(
+                    "Phonon-2: starting local fermion serve (often ~60s on first load). Wait until you see “model: phonon-2 · … · ^C to quit” before using the hotkey."
+                )
+            }
+        }
         Task { @MainActor in
             var retryDelay: UInt64 = 30
             while true {
@@ -212,7 +227,11 @@ public enum Daemon {
                 }
             }
             do {
-                try startHotkey(monitor, menuBar: menuBar) { event in
+                let readyLine =
+                    "model: \(model.id) · inject: \(options.injectMode.rawValue) · hold \(monitor.key.shortName) to dictate · ^C to quit"
+                try startHotkey(
+                    monitor, menuBar: menuBar, cliReadyLine: AppLaunch.isApp ? nil : readyLine
+                ) { event in
                     controller.handle(event)
                 }
             } catch {
@@ -230,7 +249,6 @@ public enum Daemon {
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
-        Log.info("model: \(model.id) · inject: \(options.injectMode.rawValue) · ^C to quit")
         app.run()
     }
 
@@ -244,6 +262,7 @@ public enum Daemon {
     private static func startHotkey(
         _ monitor: HotkeyMonitor,
         menuBar: MenuBarController,
+        cliReadyLine: String? = nil,
         onEvent: @escaping @MainActor (HotkeyMonitor.Event) -> Void
     ) throws {
         func start() throws {
@@ -256,7 +275,11 @@ public enum Daemon {
                 throw StartupFailure.hotkeyUnavailable(error)
             }
             menuBar.setHotkeyHealth(.ok)
-            Log.info("listening on \(monitor.key.shortName) hold")
+            if let cliReadyLine, !AppLaunch.isApp {
+                Log.info(cliReadyLine)
+            } else {
+                Log.info("listening on \(monitor.key.shortName) hold")
+            }
         }
 
         if AXIsProcessTrusted() {

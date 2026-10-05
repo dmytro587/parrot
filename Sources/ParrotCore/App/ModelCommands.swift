@@ -23,15 +23,35 @@ public enum ModelCommands {
             throw SilentExit(1)
         }
         WhisperKitTranscriber.migrateLegacyModels()
-        let t = TranscriberFactory.make(model: m)
+        PhononRuntime.apply(url: ProcessInfo.processInfo.environment["PARROT_PHONON_URL"])
 
         let sem = DispatchSemaphore(value: 0)
         var capturedError: Error?
         Task.detached {
-            do { try await t.warmUp(progress: nil) } catch { capturedError = error }
+            do {
+                if m.engine == .phonon {
+                    try await PhononModelStore.downloadIfNeeded(progress: nil)
+                } else {
+                    let t = try TranscriberFactory.make(model: m)
+                    try await t.warmUp(progress: nil)
+                    await t.unload()
+                }
+            } catch {
+                capturedError = error
+            }
             sem.signal()
         }
         sem.wait()
         if let e = capturedError { throw e }
+    }
+
+    /// `parrot models install-runtime` — Fermion CLI + MLX for Phonon-2.
+    public static func installRuntime() throws {
+        print("parrot models install-runtime")
+        print("==============================")
+        print()
+        try PhononDependencyInstaller.installIfNeeded { print($0) }
+        print()
+        print("Next: parrot models download phonon-2")
     }
 }

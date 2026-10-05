@@ -26,7 +26,9 @@ struct Run: ParsableCommand {
     @Flag(name: .long, help: "Print each modifier change the hotkey tap sees (debug).")
     var debugHotkey: Bool = false
 
-    @Flag(name: .long, help: "Write each capture to ~/Library/Caches/parrot/last-capture.wav for inspection.")
+    @Flag(
+        name: .long,
+        help: "Write each capture to ~/Library/Caches/parrot/last-capture.wav for inspection.")
     var dumpWav: Bool = false
 
     @Flag(name: .long, help: "Disable the on-screen recording overlay.")
@@ -37,10 +39,19 @@ struct Run: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "How text is inserted: paste (default; borrows the clipboard and restores it) or type-unicode.",
+        help: "Use an existing loopback fermion serve URL instead of starting one (advanced)."
+    )
+    var phononURL: String?
+
+    @Option(
+        name: .long,
+        help:
+            "How text is inserted: paste (default; borrows the clipboard and restores it) or type-unicode.",
         transform: { raw in
             guard let mode = InjectMode(rawValue: raw) else {
-                throw ValidationError("expected one of: \(InjectMode.allCases.map(\.rawValue).joined(separator: ", "))")
+                throw ValidationError(
+                    "expected one of: \(InjectMode.allCases.map(\.rawValue).joined(separator: ", "))"
+                )
             }
             return mode
         }
@@ -49,14 +60,16 @@ struct Run: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "How the microphone is run: \(CaptureMode.allCases.map(\.rawValue).joined(separator: ", ")) (default \(CaptureMode.standard.rawValue)).",
+        help:
+            "How the microphone is run: \(CaptureMode.allCases.map(\.rawValue).joined(separator: ", ")) (default \(CaptureMode.standard.rawValue)).",
         transform: parseCaptureMode
     )
     var capture: CaptureMode = .standard
 
     @Option(
         name: .long,
-        help: "Push-to-talk key for this run only, overriding Settings: \(HotkeyKey.allCases.map(\.rawValue).joined(separator: ", ")).",
+        help:
+            "Push-to-talk key for this run only, overriding Settings: \(HotkeyKey.allCases.map(\.rawValue).joined(separator: ", ")).",
         transform: parseHotkey
     )
     var hotkey: HotkeyKey?
@@ -68,16 +81,18 @@ struct Run: ParsableCommand {
             throw ExitCode(1)
         }
         do {
-            try Daemon.run(DaemonOptions(
-                skipDoctor: skipDoctor,
-                debugHotkey: debugHotkey,
-                dumpWav: dumpWav,
-                noOverlay: noOverlay,
-                model: model,
-                injectMode: injectMode,
-                captureMode: capture,
-                hotkey: hotkey
-            ))
+            try Daemon.run(
+                DaemonOptions(
+                    skipDoctor: skipDoctor,
+                    debugHotkey: debugHotkey,
+                    dumpWav: dumpWav,
+                    noOverlay: noOverlay,
+                    model: model,
+                    injectMode: injectMode,
+                    captureMode: capture,
+                    hotkey: hotkey,
+                    phononURL: phononURL
+                ))
         } catch let failure as StartupFailure {
             // The one exit-code rule. A supervisor that relaunches on nonzero
             // exit can't fix a permanent failure, so print its fix once and
@@ -117,7 +132,7 @@ struct Doctor: ParsableCommand {
 struct Models: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Manage transcription models.",
-        subcommands: [List.self, Download.self]
+        subcommands: [List.self, Download.self, InstallRuntime.self]
     )
 
     struct List: ParsableCommand {
@@ -131,6 +146,17 @@ struct Models: ParsableCommand {
 
         func run() throws {
             try exiting { try ModelCommands.download(id) }
+        }
+    }
+
+    struct InstallRuntime: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "install-runtime",
+            abstract: "Install the Fermion CLI and MLX stack for Phonon-2 (Python 3.10+)."
+        )
+
+        func run() throws {
+            try exiting { try ModelCommands.installRuntime() }
         }
     }
 }
@@ -171,7 +197,8 @@ struct Install: ParsableCommand {
 /// `--capture`: a `CaptureMode` by name.
 private func parseCaptureMode(_ raw: String) throws -> CaptureMode {
     guard let mode = CaptureMode(rawValue: raw) else {
-        throw ValidationError("expected one of: \(CaptureMode.allCases.map(\.rawValue).joined(separator: ", "))")
+        throw ValidationError(
+            "expected one of: \(CaptureMode.allCases.map(\.rawValue).joined(separator: ", "))")
     }
     return mode
 }
@@ -179,7 +206,8 @@ private func parseCaptureMode(_ raw: String) throws -> CaptureMode {
 /// `--hotkey`: a `HotkeyKey` by name.
 private func parseHotkey(_ raw: String) throws -> HotkeyKey {
     guard let key = HotkeyKey(rawValue: raw) else {
-        throw ValidationError("expected one of: \(HotkeyKey.allCases.map(\.rawValue).joined(separator: ", "))")
+        throw ValidationError(
+            "expected one of: \(HotkeyKey.allCases.map(\.rawValue).joined(separator: ", "))")
     }
     return key
 }

@@ -81,11 +81,12 @@ final class OnboardingTests: XCTestCase {
             ).model.id,
             "whisper-small"
         )
-        // The recommended model is already multilingual; extra languages need no switch.
-        XCTAssertNil(
+        // Fresh settings use Phonon-2 (English-only); non-English picks whisper-small.
+        XCTAssertEqual(
             Onboarding.apply(
                 hotkey: .fn, languages: ["en", "es"], preferred: ["en"], to: Settings()
-            ).model.id)
+            ).model.id,
+            "whisper-small")
         var turbo = Settings()
         turbo.model.id = "whisper-large-v3-turbo"
         XCTAssertEqual(

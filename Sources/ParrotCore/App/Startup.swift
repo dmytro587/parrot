@@ -100,9 +100,15 @@ enum Startup {
         // Don't look in ~/Documents for an old cache: under launchd that read
         // is denied or prompts. Name the command that can migrate instead.
         if !TranscriberFactory.isCached(model) {
-            Log.info(
-                "\(model.id) not in \(Paths.appSupport.path), downloading. to reuse a copy from ~/Documents/huggingface, run `parrot setup` instead."
-            )
+            if model.engine == .phonon {
+                Log.info(
+                    "\(model.id) not in \(Paths.appSupport.path), downloading. Loading also needs `fermion` on PATH (pip install fermion-research …)."
+                )
+            } else {
+                Log.info(
+                    "\(model.id) not in \(Paths.appSupport.path), downloading. to reuse a copy from ~/Documents/huggingface, run `parrot setup` instead."
+                )
+            }
         }
 
         return model
