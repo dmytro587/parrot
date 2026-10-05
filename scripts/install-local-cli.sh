@@ -64,3 +64,7 @@ fi
 
 echo "✓ $LINK → $(readlink "$LINK" 2>/dev/null || echo "$LINK")"
 "$LINK" --version 2>/dev/null || true
+
+if [ "${PARROT_SKIP_PHONON_DEPS:-0}" != 1 ]; then
+  bash scripts/install-phonon-deps.sh
+fi

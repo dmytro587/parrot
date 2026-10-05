@@ -44,4 +44,14 @@ public enum ModelCommands {
         sem.wait()
         if let e = capturedError { throw e }
     }
+
+    /// `parrot models install-runtime` — Fermion CLI + MLX for Phonon-2.
+    public static func installRuntime() throws {
+        print("parrot models install-runtime")
+        print("==============================")
+        print()
+        try PhononDependencyInstaller.installIfNeeded { print($0) }
+        print()
+        print("Next: parrot models download phonon-2")
+    }
 }

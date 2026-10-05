@@ -30,7 +30,7 @@ struct TranscriptionSection: View {
                             .foregroundStyle(.secondary)
                         if model.engine == .phonon, !PhononSupport.isFermionAvailable {
                             Text(
-                                "Install the Fermion CLI (Python 3.10+): `python3.12 -m pip install --user fermion-research …`"
+                                "Install the Fermion CLI: `parrot models install-runtime` (Python 3.10+)"
                             )
                             .font(.caption)
                             .foregroundStyle(.secondary)

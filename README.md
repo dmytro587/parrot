@@ -46,6 +46,7 @@ Add your names and technical terms to `~/.config/parrot/dictionary`, a plain-tex
 | `parrot install --cli` | Link `/usr/local/bin/parrot` to Parrot.app |
 | `parrot install --uninstall` | Stop launching at login and remove logs |
 | `parrot models list` | List available models |
+| `parrot models install-runtime` | Install Fermion + MLX for Phonon-2 (once) |
 | `parrot --model whistle` | Cactus Whistle (17 MB, 7 languages, CPU) |
 | `parrot --model phonon-2` | Phonon-2 (164 MB, English; downloads like other models) |
 | `parrot --model whisper-large-v3-turbo` | Larger, multilingual model |
@@ -59,15 +60,15 @@ Transcription uses Whisper (WhisperKit on the Apple Neural Engine), [Whistle](ht
 
 ### Phonon-2
 
-Weights download into `~/Library/Application Support/parrot/models/fermion/` like Whisper and Whistle. Parrot starts a loopback `fermion serve` subprocess while Phonon-2 is loaded. You still need the Fermion CLI and MLX stack once (Python **3.10+**; macOS `/usr/bin/python3` is often 3.9):
+Weights download into `~/Library/Application Support/parrot/models/fermion/` like Whisper and Whistle. Parrot starts a loopback `fermion serve` subprocess while Phonon-2 is loaded. Install the Fermion CLI once (Python **3.10+**; macOS `/usr/bin/python3` is often 3.9):
 
 ```sh
-python3.12 -m pip install --user fermion-research mlx mlx-audio mlx-lm soundfile scipy zstandard
-# ensure `fermion` is on PATH (pip --user → ~/.local/bin, or python.org → ~/Library/Python/3.12/bin)
-export PATH="$HOME/.local/bin:$PATH"
+parrot models install-runtime          # pip install fermion-research + MLX into ~/.local/bin
 parrot models download phonon-2
 parrot run --model phonon-2
 ```
+
+`scripts/install-local-cli.sh` and [perroquet.xyz/install.sh](https://perroquet.xyz/install.sh) run `install-runtime` automatically when Python 3.10+ is available. Set `PARROT_SKIP_PHONON_DEPS=1` to skip.
 
 Use `--phonon-url` or `PARROT_PHONON_URL` only if you already run your own loopback server. Set `PARROT_PHONON_API_KEY` when that server requires a bearer token.
 

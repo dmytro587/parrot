@@ -132,6 +132,29 @@ open "$DEST"
 
 green "✓ Parrot ${TAG} installed at ${DEST}"
 echo
+if [ "${PARROT_SKIP_PHONON_DEPS:-0}" != 1 ]; then
+  dim "→ Phonon-2 runtime (fermion + MLX, optional)…"
+  if "$EXE" models install-runtime 2>/dev/null; then
+    :
+  elif command -v fermion >/dev/null 2>&1; then
+    green "✓ fermion already on PATH"
+  else
+    PY=""
+    for p in python3.12 python3.13 python3.11; do
+      if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import sys; exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
+        PY="$(command -v "$p")"
+        break
+      fi
+    done
+    if [ -n "$PY" ]; then
+      "$PY" -m pip install --user fermion-research mlx mlx-audio mlx-lm soundfile scipy zstandard || true
+      dim '  add ~/.local/bin to PATH if fermion is not found'
+    else
+      dim "  install Python 3.12+, then: parrot models install-runtime"
+    fi
+  fi
+fi
 echo "next:"
 echo "  allow Microphone and Accessibility for Parrot when macOS asks"
+echo "  parrot models download phonon-2   # if you use Phonon-2 (weights ~164 MB)"
 echo "  parrot install --launch-at-login   # (optional) start at login"

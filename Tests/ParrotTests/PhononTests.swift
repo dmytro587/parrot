@@ -56,6 +56,17 @@ final class PhononHotwordTests: XCTestCase {
     }
 }
 
+final class PhononDependencyInstallerTests: XCTestCase {
+    func testPythonVersionParsing() {
+        guard let python = PhononDependencyInstaller.locatePython() else {
+            throw XCTSkip("no Python 3.10+ on PATH")
+        }
+        let version = PhononDependencyInstaller.pythonVersion(at: python)
+        XCTAssertGreaterThanOrEqual(version.0, 3)
+        XCTAssertGreaterThanOrEqual(version.1, 10)
+    }
+}
+
 final class PhononSupportTests: XCTestCase {
     func testParseServePortFromFermionLine() {
         let line =

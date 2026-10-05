@@ -132,7 +132,7 @@ struct Doctor: ParsableCommand {
 struct Models: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Manage transcription models.",
-        subcommands: [List.self, Download.self]
+        subcommands: [List.self, Download.self, InstallRuntime.self]
     )
 
     struct List: ParsableCommand {
@@ -146,6 +146,17 @@ struct Models: ParsableCommand {
 
         func run() throws {
             try exiting { try ModelCommands.download(id) }
+        }
+    }
+
+    struct InstallRuntime: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "install-runtime",
+            abstract: "Install the Fermion CLI and MLX stack for Phonon-2 (Python 3.10+)."
+        )
+
+        func run() throws {
+            try exiting { try ModelCommands.installRuntime() }
         }
     }
 }

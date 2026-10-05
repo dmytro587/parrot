@@ -45,7 +45,7 @@ public enum DoctorReport {
             name: name,
             status: .fail("`fermion` not found on PATH"),
             remediation:
-                "python3.12 -m pip install --user fermion-research mlx mlx-audio mlx-lm soundfile scipy zstandard; put ~/.local/bin on PATH"
+                "run `parrot models install-runtime` (needs Python 3.10+; adds ~/.local/bin/fermion)"
         )
     }
 
