@@ -59,10 +59,11 @@ public enum Daemon {
             MicrophoneAccess.requestIfUndetermined()
         }
 
-        let transcriber = WhisperKitTranscriber(model: chosenModel)
+        let transcriber = TranscriberFactory.make(model: chosenModel)
 
         try MainActor.assumeIsolated {
-            try runLoop(model: chosenModel, transcriber: transcriber, settings: settings, options: options)
+            try runLoop(
+                model: chosenModel, transcriber: transcriber, settings: settings, options: options)
         }
     }
 
@@ -83,14 +84,15 @@ public enum Daemon {
     @MainActor
     private static func runLoop(
         model: TranscriptionModel,
-        transcriber: WhisperKitTranscriber,
+        transcriber: any ModelLoadingTranscriber,
         settings: SettingsStore,
         options: DaemonOptions
     ) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let monitor = HotkeyMonitor(key: options.hotkey ?? settings.current.hotkey.key, debug: options.debugHotkey)
+        let monitor = HotkeyMonitor(
+            key: options.hotkey ?? settings.current.hotkey.key, debug: options.debugHotkey)
         let capture = AudioCapture(mode: options.captureMode)
         let overlay: RecordingOverlay? = options.noOverlay ? nil : RecordingOverlay()
         if let overlay {
@@ -132,7 +134,8 @@ public enum Daemon {
         let dictionaryContext = {
             var context = DictionaryContext(
                 store: dictionary,
-                language: DictionaryContext.language(of: switcher.model, setting: settings.current.language.code),
+                language: DictionaryContext.language(
+                    of: switcher.model, setting: settings.current.language.code),
                 examples: settings.current.dictionary.examples
             ).context()
             context.spokenLanguages = settings.current.language.spoken ?? []
@@ -161,12 +164,16 @@ public enum Daemon {
         settings.observe { old, new in
             if old.hotkey != new.hotkey {
                 if options.hotkey != nil {
-                    Log.info("hotkey: \(new.hotkey.key.rawValue) saved; --hotkey \(monitor.key.rawValue) stays in effect for this run")
+                    Log.info(
+                        "hotkey: \(new.hotkey.key.rawValue) saved; --hotkey \(monitor.key.rawValue) stays in effect for this run"
+                    )
                 } else {
                     // The tap stays; it matches the new key from the next event.
                     monitor.setKey(new.hotkey.key)
                     menuBar.setHotkey(new.hotkey.key)
-                    Log.info("hotkey: \(new.hotkey.key.rawValue); hold \(new.hotkey.key.shortName) to dictate")
+                    Log.info(
+                        "hotkey: \(new.hotkey.key.rawValue); hold \(new.hotkey.key.shortName) to dictate"
+                    )
                 }
             }
             if old.model != new.model {
@@ -193,10 +200,11 @@ public enum Daemon {
             var retryDelay: UInt64 = 30
             while true {
                 do {
-                    try await transcriber.warmUp()
+                    try await transcriber.warmUp(progress: nil)
                     break
                 } catch {
-                    Log.error("\(StartupFailure.warmupFailed(error).message); retrying in \(retryDelay)s")
+                    Log.error(
+                        "\(StartupFailure.warmupFailed(error).message); retrying in \(retryDelay)s")
                     menuBar.setHotkeyHealth(.modelFailed)
                     try? await Task.sleep(nanoseconds: retryDelay * 1_000_000_000)
                     retryDelay = min(retryDelay * 2, 600)
@@ -256,11 +264,14 @@ public enum Daemon {
             return
         }
 
-        Log.info("accessibility not granted; waiting (System Settings → Privacy & Security → Accessibility → parrot)")
+        Log.info(
+            "accessibility not granted; waiting (System Settings → Privacy & Security → Accessibility → parrot)"
+        )
         menuBar.setHotkeyHealth(.accessibilityMissing)
         // Parrot.app leaves the prompt to the onboarding window's Allow (#51).
         if !AppLaunch.isApp {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            let options =
+                [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         }
 

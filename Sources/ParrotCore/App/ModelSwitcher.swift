@@ -13,7 +13,7 @@ import Foundation
 final class ModelSwitcher {
     /// The model the controller transcribes with.
     private(set) var model: TranscriptionModel
-    private var transcriber: WhisperKitTranscriber
+    private var transcriber: any ModelLoadingTranscriber
     /// Set by the daemon once the controller exists.
     weak var controller: DictationController?
 
@@ -23,7 +23,10 @@ final class ModelSwitcher {
     /// Bumped on every change, so a superseded load cannot swap or report.
     private var generation = 0
 
-    init(model: TranscriptionModel, transcriber: WhisperKitTranscriber, menuBar: MenuBarController, status: ModelLoadStatus? = nil) {
+    init(
+        model: TranscriptionModel, transcriber: any ModelLoadingTranscriber, menuBar: MenuBarController,
+        status: ModelLoadStatus? = nil
+    ) {
         self.model = model
         self.transcriber = transcriber
         self.menuBar = menuBar
@@ -33,7 +36,10 @@ final class ModelSwitcher {
     /// Loads and swaps in `id`, a `ModelRegistry` id or nil for the
     /// recommended model.
     func select(_ id: String?) {
-        guard let next = Daemon.knownModel(id).flatMap(ModelRegistry.find) ?? ModelRegistry.recommended() else { return }
+        guard
+            let next = Daemon.knownModel(id).flatMap(ModelRegistry.find)
+                ?? ModelRegistry.recommended()
+        else { return }
         generation += 1
         load?.cancel()
         load = nil
@@ -45,8 +51,9 @@ final class ModelSwitcher {
         }
 
         let generation = self.generation
-        let incoming = WhisperKitTranscriber(model: next)
-        report(WhisperKitTranscriber.isCached(next) ? .loading : .downloading(nil), next, generation)
+        let incoming = TranscriberFactory.make(model: next)
+        report(
+            TranscriberFactory.isCached(next) ? .loading : .downloading(nil), next, generation)
         Log.info("model: loading \(next.id) behind \(model.id)")
 
         // The switcher lives as long as the daemon, so the task holds it
@@ -55,7 +62,8 @@ final class ModelSwitcher {
             do {
                 try await incoming.warmUp { fraction in
                     Task { @MainActor in
-                        self.report(fraction < 1 ? .downloading(fraction) : .loading, next, generation)
+                        self.report(
+                            fraction < 1 ? .downloading(fraction) : .loading, next, generation)
                     }
                 }
                 report(.loading, next, generation)
@@ -79,7 +87,7 @@ final class ModelSwitcher {
         }
     }
 
-    private func swap(to next: TranscriptionModel, _ incoming: WhisperKitTranscriber) {
+    private func swap(to next: TranscriptionModel, _ incoming: any ModelLoadingTranscriber) {
         let outgoing = transcriber
         controller?.replaceTranscriber(incoming)
         transcriber = incoming
@@ -93,12 +101,18 @@ final class ModelSwitcher {
         Task { await outgoing.unload() }
     }
 
-    private func report(_ phase: ModelLoadStatus.Phase, _ next: TranscriptionModel, _ generation: Int) {
+    private func report(
+        _ phase: ModelLoadStatus.Phase, _ next: TranscriptionModel, _ generation: Int
+    ) {
         // A progress callback can land after the swap it belonged to.
         guard generation == self.generation, next.id != model.id else { return }
         // Downloading → loading only moves forward; a late progress callback
         // must not put "downloading" back.
-        if case .downloading = phase, status.current?.modelID == next.id, status.current?.phase == .loading { return }
+        if case .downloading = phase, status.current?.modelID == next.id,
+            status.current?.phase == .loading
+        {
+            return
+        }
         let state = ModelLoadStatus.State(modelID: next.id, phase: phase)
         guard state != status.current else { return }
         status.show(state)

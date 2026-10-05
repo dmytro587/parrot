@@ -82,13 +82,22 @@ enum TranscriptionBench {
             print("--runs must be at least 1")
             throw SilentExit(64)
         }
-        guard let model = options.model.map(ModelRegistry.find) ?? ModelRegistry.recommended() else {
+        guard let model = options.model.map(ModelRegistry.find) ?? ModelRegistry.recommended()
+        else {
             print("unknown model: \(options.model ?? "")")
             throw SilentExit(1)
         }
-        guard WhisperKitTranscriber.isCached(model) else {
-            print("\(model.id) is not downloaded; run: parrot models download \(model.id)")
-            throw SilentExit(1)
+        if model.engine != .whistle {
+            guard TranscriberFactory.isCached(model) else {
+                print("\(model.id) is not downloaded; run: parrot models download \(model.id)")
+                throw SilentExit(1)
+            }
+        }
+        if model.engine == .whistle,
+            options.baseline || options.encoder != nil || options.decoder != nil
+        {
+            print("Whistle ignores --baseline, --encoder and --decoder")
+            throw SilentExit(64)
         }
         var tuning = options.baseline ? WhisperTuning.baseline : WhisperTuning.standard
         if let name = options.encoder {
@@ -131,24 +140,45 @@ enum TranscriptionBench {
         }
         if let prompt = options.prompt {
             chosen.prompt = prompt
-            chosen.examples = language == nil ? Dictionary(uniqueKeysWithValues: model.supportedLanguages.map { ($0, prompt) }) : [:]
+            chosen.examples =
+                language == nil
+                ? Dictionary(uniqueKeysWithValues: model.supportedLanguages.map { ($0, prompt) })
+                : [:]
         }
         let context = chosen
-        let promptLabel = context.prompt.map { "\($0.split(separator: " ").count) words" }
+        let promptLabel =
+            context.prompt.map { "\($0.split(separator: " ").count) words" }
             ?? (context.examples.isEmpty ? "none" : "the example for the detected language")
 
-        let transcriber = WhisperKitTranscriber(model: model, tuning: tuning)
-        try blocking { try await transcriber.warmUp() }
+        let transcriber: any ModelLoadingTranscriber
+        if model.engine == .whistle {
+            transcriber = WhistleTranscriber(model: model)
+        } else {
+            transcriber = WhisperKitTranscriber(model: model, tuning: tuning)
+        }
+        try blocking { try await transcriber.warmUp(progress: nil) }
 
-        let languageLabel = model.isMultilingual ? (language ?? "automatic") : "\(language ?? "-") (model)"
-        print("model \(model.id) · \(options.baseline ? "baseline" : "standard") tuning · \(describe(tuning)) · language \(languageLabel) · prompt \(promptLabel)")
-        print("\(files.count) files · \(options.runs) runs each\(options.pause > 0 ? String(format: " · %.0f s idle before each", options.pause) : "") · ms, median/p90")
+        let languageLabel =
+            model.isMultilingual ? (language ?? "automatic") : "\(language ?? "-") (model)"
+        let tuningLabel =
+            model.engine == .whistle
+            ? "needle"
+            : "\(options.baseline ? "baseline" : "standard") tuning · \(describe(tuning))"
+        print(
+            "model \(model.id) · \(tuningLabel) · language \(languageLabel) · prompt \(promptLabel)"
+        )
+        print(
+            "\(files.count) files · \(options.runs) runs each\(options.pause > 0 ? String(format: " · %.0f s idle before each", options.pause) : "") · ms, median/p90"
+        )
 
         // The first transcription after loading pays for CoreML's first
         // prediction; report it and keep it out of the medians.
         let firstAudio = try AudioProcessor.loadAudioAsFloatArray(fromPath: files[0].audio.path)
         let first = try blocking { try await transcriber.transcribe(firstAudio, context: context) }
-        print(String(format: "first transcription after load: %.0f ms", (first.timings?.total ?? 0) * 1000))
+        print(
+            String(
+                format: "first transcription after load: %.0f ms",
+                (first.timings?.total ?? 0) * 1000))
         print("")
         print(Row.header)
 
@@ -166,7 +196,9 @@ enum TranscriptionBench {
             var firstWord: Bool?
             for _ in 0..<options.runs {
                 if options.pause > 0 { Thread.sleep(forTimeInterval: options.pause) }
-                let transcript = try blocking { try await transcriber.transcribe(audio, context: context) }
+                let transcript = try blocking {
+                    try await transcriber.transcribe(audio, context: context)
+                }
                 samples.append(transcript.timings ?? TranscriberTimings.zero)
                 if let t = transcript.timings {
                     languages[t.language ?? "-", default: 0] += 1
@@ -174,7 +206,8 @@ enum TranscriptionBench {
                 }
                 if wer == nil, let reference = file.reference {
                     wer = WordErrorRate(reference: reference, hypothesis: transcript.text)
-                    firstWord = FirstWord.recalled(reference: reference, hypothesis: transcript.text)
+                    firstWord = FirstWord.recalled(
+                        reference: reference, hypothesis: transcript.text)
                 }
             }
             if let wer {
@@ -186,19 +219,38 @@ enum TranscriptionBench {
                 if firstWord { firstWordHits += 1 }
             }
             totals += samples.map { $0.total * 1000 }
-            print(Row(name: file.audio.lastPathComponent, audioSeconds: Double(audio.count) / 16_000, samples: samples, wer: wer).text)
+            print(
+                Row(
+                    name: file.audio.lastPathComponent, audioSeconds: Double(audio.count) / 16_000,
+                    samples: samples, wer: wer
+                ).text)
         }
         if totalWords > 0 {
-            print(String(format: "\nWER %.1f%% (%d errors / %d words)", 100 * Double(totalErrors) / Double(totalWords), totalErrors, totalWords))
+            print(
+                String(
+                    format: "\nWER %.1f%% (%d errors / %d words)",
+                    100 * Double(totalErrors) / Double(totalWords), totalErrors, totalWords))
         }
         if firstWordFiles > 0 {
-            print(String(format: "first word %d/%d (%.1f%%)", firstWordHits, firstWordFiles, 100 * Double(firstWordHits) / Double(firstWordFiles)))
+            print(
+                String(
+                    format: "first word %d/%d (%.1f%%)", firstWordHits, firstWordFiles,
+                    100 * Double(firstWordHits) / Double(firstWordFiles)))
         }
-        print(String(format: "total ms over all files: median %.0f, p90 %.0f", Percentile.of(totals, 50), Percentile.of(totals, 90)))
+        print(
+            String(
+                format: "total ms over all files: median %.0f, p90 %.0f", Percentile.of(totals, 50),
+                Percentile.of(totals, 90)))
         if !detections.isEmpty {
-            print(String(format: "language detection ms: median %.0f, p90 %.0f", Percentile.of(detections, 50), Percentile.of(detections, 90)))
+            print(
+                String(
+                    format: "language detection ms: median %.0f, p90 %.0f",
+                    Percentile.of(detections, 50), Percentile.of(detections, 90)))
         }
-        print("languages: " + languages.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", "))
+        print(
+            "languages: "
+                + languages.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(
+                    separator: ", "))
     }
 
     struct Recording {
@@ -210,19 +262,22 @@ enum TranscriptionBench {
     static func recordings(in folder: String) throws -> [Recording] {
         let dir = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath, isDirectory: true)
         let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
-        return names
+        return
+            names
             .filter { $0.lowercased().hasSuffix(".wav") }
             .sorted()
             .map { name in
                 let audio = dir.appendingPathComponent(name)
                 let text = audio.deletingPathExtension().appendingPathExtension("txt")
-                return Recording(audio: audio, reference: try? String(contentsOf: text, encoding: .utf8))
+                return Recording(
+                    audio: audio, reference: try? String(contentsOf: text, encoding: .utf8))
             }
     }
 
     /// One printed line: a file's stages over its runs.
     struct Row {
-        static let header = "file                     audio  total      pre      enc      dec        post    tokens  win  fb   WER"
+        static let header =
+            "file                     audio  total      pre      enc      dec        post    tokens  win  fb   WER"
 
         var name: String
         var audioSeconds: Double
@@ -232,7 +287,8 @@ enum TranscriptionBench {
         var text: String {
             func stage(_ key: KeyPath<TranscriberTimings, TimeInterval>) -> String {
                 let values = samples.map { $0[keyPath: key] * 1000 }
-                return String(format: "%.0f/%.0f", Percentile.of(values, 50), Percentile.of(values, 90))
+                return String(
+                    format: "%.0f/%.0f", Percentile.of(values, 50), Percentile.of(values, 90))
             }
             let tokens = Percentile.of(samples.map { Double($0.tokens) }, 50)
             let windows = Percentile.of(samples.map { Double($0.windows) }, 50)
@@ -258,8 +314,12 @@ enum TranscriptionBench {
         ]
         if tuning.withoutTimestamps { parts.append("no timestamps") }
         if tuning.trimSilence { parts.append("trim") }
-        if tuning.leadPadding > 0 { parts.append(String(format: "lead pad %.2f s", tuning.leadPadding)) }
-        if tuning.trailPadding > 0 { parts.append(String(format: "trail pad %.2f s", tuning.trailPadding)) }
+        if tuning.leadPadding > 0 {
+            parts.append(String(format: "lead pad %.2f s", tuning.leadPadding))
+        }
+        if tuning.trailPadding > 0 {
+            parts.append(String(format: "trail pad %.2f s", tuning.trailPadding))
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -330,7 +390,9 @@ struct WordErrorRate: Equatable {
     var errors: Int
     var referenceWords: Int
 
-    var rate: Double { referenceWords == 0 ? (errors == 0 ? 0 : 1) : Double(errors) / Double(referenceWords) }
+    var rate: Double {
+        referenceWords == 0 ? (errors == 0 ? 0 : 1) : Double(errors) / Double(referenceWords)
+    }
 
     init(reference: String, hypothesis: String) {
         let ref = Self.words(reference)
@@ -345,9 +407,14 @@ struct WordErrorRate: Equatable {
         let lowered = text.lowercased().replacingOccurrences(of: "’", with: "'")
         var cleaned = ""
         for ch in lowered {
-            if ch.isLetter || ch.isNumber || ch == "'" { cleaned.append(ch) } else { cleaned.append(" ") }
+            if ch.isLetter || ch.isNumber || ch == "'" {
+                cleaned.append(ch)
+            } else {
+                cleaned.append(" ")
+            }
         }
-        return cleaned
+        return
+            cleaned
             .split(separator: " ")
             .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "'")) }
             .filter { !$0.isEmpty }

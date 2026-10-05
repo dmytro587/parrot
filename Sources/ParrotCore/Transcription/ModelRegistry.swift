@@ -8,19 +8,31 @@ import Foundation
 package enum ModelRegistry {
     static let shared: [TranscriptionModel] = [
         TranscriptionModel(
+            id: "whistle",
+            displayName: "Whistle",
+            engine: .whistle,
+            whisperKitID: nil,
+            cactArtifact: "whistle.cact",
+            sizeMB: 17,
+            languages: ["en", "de", "fr", "es", "it", "nl", "pl"],
+            recommended: true
+        ),
+        TranscriptionModel(
             id: "whisper-base.en",
             displayName: "Whisper Base (English)",
             engine: .whisperKit,
             whisperKitID: "openai_whisper-base.en",
+            cactArtifact: nil,
             sizeMB: 145,
             languages: ["en"],
-            recommended: true
+            recommended: false
         ),
         TranscriptionModel(
             id: "whisper-large-v3-turbo",
             displayName: "Whisper Large v3 Turbo",
             engine: .whisperKit,
             whisperKitID: "openai_whisper-large-v3-v20240930_turbo",
+            cactArtifact: nil,
             sizeMB: 1620,
             languages: ["multi"],
             recommended: false
@@ -30,6 +42,7 @@ package enum ModelRegistry {
             displayName: "Whisper Small (English)",
             engine: .whisperKit,
             whisperKitID: "openai_whisper-small.en",
+            cactArtifact: nil,
             sizeMB: 488,
             languages: ["en"],
             recommended: false
@@ -39,6 +52,7 @@ package enum ModelRegistry {
             displayName: "Whisper Small",
             engine: .whisperKit,
             whisperKitID: "openai_whisper-small",
+            cactArtifact: nil,
             sizeMB: 490,
             languages: ["multi"],
             recommended: false

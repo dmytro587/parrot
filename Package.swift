@@ -15,12 +15,27 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.0"),
     ],
     targets: [
+        // Cactus Needle engine (Whistle STT). libneedle.a is vendored under Vendor/needle.
+        .target(
+            name: "CNeedle",
+            path: "Sources/CNeedle",
+            publicHeadersPath: "include",
+            cSettings: [.headerSearchPath("include")],
+            linkerSettings: [
+                .unsafeFlags(["-LVendor/needle/lib", "-lneedle"], .when(platforms: [.macOS]))
+            ]
+        ),
         // All behaviour: capture, hotkey, transcription, pipeline, settings, UI.
         .target(
             name: "ParrotCore",
             dependencies: [
+                "CNeedle",
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "Sparkle", package: "Sparkle"),
+            ],
+            linkerSettings: [
+                .linkedLibrary("c++"),
+                .unsafeFlags(["-LVendor/needle/lib", "-lneedle"], .when(platforms: [.macOS])),
             ]
         ),
         // Thin entry point: ArgumentParser commands that call into ParrotCore.

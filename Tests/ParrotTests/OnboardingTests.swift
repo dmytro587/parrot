@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import ParrotCore
 
 final class OnboardingTests: XCTestCase {
@@ -17,12 +18,15 @@ final class OnboardingTests: XCTestCase {
     }
 
     func testOlderSettingsFilesHaveNotOnboarded() throws {
-        let settings = try JSONDecoder().decode(Settings.self, from: Data(#"{"hotkey":{"key":"fn"}}"#.utf8))
+        let settings = try JSONDecoder().decode(
+            Settings.self, from: Data(#"{"hotkey":{"key":"fn"}}"#.utf8))
         XCTAssertFalse(settings.onboarding.completed)
     }
 
     func testHotkeyChoicesKeepAKeyChosenInSettings() {
-        XCTAssertEqual(Onboarding.hotkeyChoices(current: .fn), [.fn, .rightOption, .rightCommand, .rightControl])
+        XCTAssertEqual(
+            Onboarding.hotkeyChoices(current: .fn),
+            [.fn, .rightOption, .rightCommand, .rightControl])
         XCTAssertEqual(Onboarding.hotkeyChoices(current: .leftShift).last, .leftShift)
     }
 
@@ -44,34 +48,56 @@ final class OnboardingTests: XCTestCase {
     }
 
     func testTheMacsLanguagesLeaveTheListUnset() {
-        let next = Onboarding.apply(hotkey: .rightOption, languages: ["es", "en"], preferred: ["en", "es"], to: Settings())
+        let next = Onboarding.apply(
+            hotkey: .rightOption, languages: ["es", "en"], preferred: ["en", "es"], to: Settings())
         XCTAssertNil(next.language.spoken)
         XCTAssertEqual(next.hotkey.key, .rightOption)
         XCTAssertTrue(next.onboarding.completed)
     }
 
     func testAChangedListIsSaved() {
-        let next = Onboarding.apply(hotkey: .fn, languages: ["en", "fr"], preferred: ["en"], to: Settings())
+        let next = Onboarding.apply(
+            hotkey: .fn, languages: ["en", "fr"], preferred: ["en"], to: Settings())
         XCTAssertEqual(next.language.spoken, ["en", "fr"])
     }
 
     func testEnglishOnlyKeepsTheModel() {
-        XCTAssertNil(Onboarding.apply(hotkey: .fn, languages: ["en"], preferred: ["en"], to: Settings()).model.id)
+        XCTAssertNil(
+            Onboarding.apply(hotkey: .fn, languages: ["en"], preferred: ["en"], to: Settings())
+                .model.id)
         var turbo = Settings()
         turbo.model.id = "whisper-large-v3-turbo"
-        XCTAssertEqual(Onboarding.apply(hotkey: .fn, languages: ["en"], preferred: ["en"], to: turbo).model.id, "whisper-large-v3-turbo")
+        XCTAssertEqual(
+            Onboarding.apply(hotkey: .fn, languages: ["en"], preferred: ["en"], to: turbo).model.id,
+            "whisper-large-v3-turbo")
     }
 
     func testAnotherLanguageMovesAnEnglishOnlyModelToSmall() {
-        XCTAssertEqual(Onboarding.apply(hotkey: .fn, languages: ["en", "es"], preferred: ["en"], to: Settings()).model.id, "whisper-small")
+        var englishOnly = Settings()
+        englishOnly.model.id = "whisper-base.en"
+        XCTAssertEqual(
+            Onboarding.apply(
+                hotkey: .fn, languages: ["en", "es"], preferred: ["en"], to: englishOnly
+            ).model.id,
+            "whisper-small"
+        )
+        // The recommended model is already multilingual; extra languages need no switch.
+        XCTAssertNil(
+            Onboarding.apply(
+                hotkey: .fn, languages: ["en", "es"], preferred: ["en"], to: Settings()
+            ).model.id)
         var turbo = Settings()
         turbo.model.id = "whisper-large-v3-turbo"
-        XCTAssertEqual(Onboarding.apply(hotkey: .fn, languages: ["es"], preferred: ["en"], to: turbo).model.id, "whisper-large-v3-turbo")
+        XCTAssertEqual(
+            Onboarding.apply(hotkey: .fn, languages: ["es"], preferred: ["en"], to: turbo).model.id,
+            "whisper-large-v3-turbo")
     }
 
     func testStartsWithTheMacsLanguages() {
-        XCTAssertEqual(Onboarding.initialLanguages(saved: nil, preferred: ["en", "es"]), ["en", "es"])
+        XCTAssertEqual(
+            Onboarding.initialLanguages(saved: nil, preferred: ["en", "es"]), ["en", "es"])
         XCTAssertEqual(Onboarding.initialLanguages(saved: nil, preferred: ["xx", "es"]), ["es"])
-        XCTAssertEqual(Onboarding.initialLanguages(saved: ["en", "fr"], preferred: ["en", "es"]), ["en", "fr"])
+        XCTAssertEqual(
+            Onboarding.initialLanguages(saved: ["en", "fr"], preferred: ["en", "es"]), ["en", "fr"])
     }
 }
