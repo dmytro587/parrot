@@ -9,23 +9,25 @@ package protocol ModelLoadingTranscriber: Transcriber {
 extension WhisperKitTranscriber: ModelLoadingTranscriber {}
 
 package enum TranscriberFactory {
-    package static func make(model: TranscriptionModel) -> any ModelLoadingTranscriber {
+    package static func make(model: TranscriptionModel) throws -> any ModelLoadingTranscriber {
         switch model.engine {
         case .whisperKit:
             return WhisperKitTranscriber(model: model)
         case .whistle:
             return WhistleTranscriber(model: model)
-        case .parakeet:
-            return WhisperKitTranscriber(model: model)
+        case .phonon:
+            return PhononTranscriber(model: model)
         }
     }
 
     package static func isCached(_ model: TranscriptionModel) -> Bool {
         switch model.engine {
-        case .whisperKit, .parakeet:
+        case .whisperKit:
             return WhisperKitTranscriber.isCached(model)
         case .whistle:
             return WhistleTranscriber.isCached(model)
+        case .phonon:
+            return PhononTranscriber.isCached(model)
         }
     }
 }

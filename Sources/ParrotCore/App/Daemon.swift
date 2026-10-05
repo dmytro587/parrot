@@ -14,6 +14,9 @@ public struct DaemonOptions {
     public var captureMode: CaptureMode
     /// The push-to-talk key for this run only (#42). Nil uses the saved setting.
     public var hotkey: HotkeyKey?
+    /// Optional loopback URL for an already-running `fermion serve` (advanced). When nil,
+    /// Parrot downloads weights and starts its own server during model load.
+    public var phononURL: String?
 
     public init(
         skipDoctor: Bool,
@@ -23,7 +26,8 @@ public struct DaemonOptions {
         model: String?,
         injectMode: InjectMode = .paste,
         captureMode: CaptureMode = .standard,
-        hotkey: HotkeyKey? = nil
+        hotkey: HotkeyKey? = nil,
+        phononURL: String? = nil
     ) {
         self.skipDoctor = skipDoctor
         self.debugHotkey = debugHotkey
@@ -33,6 +37,7 @@ public struct DaemonOptions {
         self.injectMode = injectMode
         self.captureMode = captureMode
         self.hotkey = hotkey
+        self.phononURL = phononURL
     }
 }
 
@@ -59,7 +64,9 @@ public enum Daemon {
             MicrophoneAccess.requestIfUndetermined()
         }
 
-        let transcriber = TranscriberFactory.make(model: chosenModel)
+        PhononRuntime.apply(
+            url: options.phononURL ?? ProcessInfo.processInfo.environment["PARROT_PHONON_URL"])
+        let transcriber = try TranscriberFactory.make(model: chosenModel)
 
         try MainActor.assumeIsolated {
             try runLoop(

@@ -11,7 +11,7 @@ Hold `fn`, speak, release. Your words appear at the cursor. On-device dictation 
 
 ## 1. Install
 
-Download [Parrot.dmg](https://github.com/humanitas-labs/parrot/releases/latest/download/Parrot.dmg), drag Parrot to Applications, and open it. Turn on Parrot when macOS asks for Accessibility and the microphone. The first start downloads the speech model (about 150 MB).
+Download [Parrot.dmg](https://github.com/humanitas-labs/parrot/releases/latest/download/Parrot.dmg), drag Parrot to Applications, and open it. Turn on Parrot when macOS asks for Accessibility and the microphone. The first start downloads **Phonon-2** (about 164 MB) and needs the [Fermion CLI](#phonon-2) once on Apple silicon.
 
 Or from a terminal, which also installs the `parrot` command:
 
@@ -47,6 +47,7 @@ Add your names and technical terms to `~/.config/parrot/dictionary`, a plain-tex
 | `parrot install --uninstall` | Stop launching at login and remove logs |
 | `parrot models list` | List available models |
 | `parrot --model whistle` | Cactus Whistle (17 MB, 7 languages, CPU) |
+| `parrot --model phonon-2` | Phonon-2 (164 MB, English; downloads like other models) |
 | `parrot --model whisper-large-v3-turbo` | Larger, multilingual model |
 | `parrot --hotkey right-option` | Use another key for this run only; Settings… changes the saved key |
 | `parrot --no-overlay` | Hide the recording pill |
@@ -54,7 +55,21 @@ Add your names and technical terms to `~/.config/parrot/dictionary`, a plain-tex
 
 ## 5. How it works
 
-Transcription uses Whisper (WhisperKit on the Apple Neural Engine) or [Whistle](https://cactuscompute.com/blog/whistle) (Cactus Needle, on-device CPU). AVAudioEngine captures the mic, a CGEventTap watches the hotkey, and a synthesized ⌘V pastes the result. Nothing leaves your Mac, and logs never contain what you said. See [docs/architecture.md](docs/architecture.md).
+Transcription uses Whisper (WhisperKit on the Apple Neural Engine), [Whistle](https://cactuscompute.com/blog/whistle) (Cactus Needle, on-device CPU), or [Phonon-2](https://github.com/fermionresearch/phonon) (Fermion MLX, loaded when you pick the model). AVAudioEngine captures the mic, a CGEventTap watches the hotkey, and a synthesized ⌘V pastes the result. Audio stays on your Mac; logs never contain what you said. See [docs/architecture.md](docs/architecture.md).
+
+### Phonon-2
+
+Weights download into `~/Library/Application Support/parrot/models/fermion/` like Whisper and Whistle. Parrot starts a loopback `fermion serve` subprocess while Phonon-2 is loaded. You still need the Fermion CLI and MLX stack once (Python **3.10+**; macOS `/usr/bin/python3` is often 3.9):
+
+```sh
+python3.12 -m pip install --user fermion-research mlx mlx-audio mlx-lm soundfile scipy zstandard
+# ensure `fermion` is on PATH (pip --user → ~/.local/bin, or python.org → ~/Library/Python/3.12/bin)
+export PATH="$HOME/.local/bin:$PATH"
+parrot models download phonon-2
+parrot run --model phonon-2
+```
+
+Use `--phonon-url` or `PARROT_PHONON_URL` only if you already run your own loopback server. Set `PARROT_PHONON_API_KEY` when that server requires a bearer token.
 
 ## 6. Build from source
 

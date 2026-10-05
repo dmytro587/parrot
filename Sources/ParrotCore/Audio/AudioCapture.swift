@@ -130,7 +130,8 @@ package final class AudioCapture {
             guard buffer.admit() else { return }
             var firstSound: UInt64?
             if buffer.awaitingSound, pcm.format.sampleRate > 0, let frame = firstNonZeroFrame(pcm) {
-                firstSound = firstFrame &+ UInt64(Double(frame) / pcm.format.sampleRate * 1_000_000_000)
+                firstSound =
+                    firstFrame &+ UInt64(Double(frame) / pcm.format.sampleRate * 1_000_000_000)
             }
             buffer.noteInput(firstFrameAt: firstFrame, firstSoundAt: firstSound)
             let converted = converters.convert(pcm) { chunk in
@@ -166,14 +167,18 @@ package final class AudioCapture {
     /// One line per recording: counts and timings, never audio. Press to
     /// first sample is the start of the dictation the user loses.
     private func logStats(_ stats: CaptureBuffer.Stats) {
-        func ms(_ delay: TimeInterval?) -> String { delay.map { String(format: "%.0f ms", $0 * 1000) } ?? "none" }
+        func ms(_ delay: TimeInterval?) -> String {
+            delay.map { String(format: "%.0f ms", $0 * 1000) } ?? "none"
+        }
         var line = String(
             format: "  input %.0f Hz × %u · delivered %.0f Hz × %u · %@ start %.0f ms",
             device.sampleRate, device.channels, delivered.sampleRate, delivered.channels,
             mode.rawValue, startDelay * 1000
         )
-        line += " · press→first sample \(ms(stats.firstSampleDelay)) · first sound \(ms(stats.firstSoundDelay))"
-        line += " · first buffer \(ms(stats.firstBufferDelay)) · \(stats.buffers) buffers · \(stats.inputFrames) frames"
+        line +=
+            " · press→first sample \(ms(stats.firstSampleDelay)) · first sound \(ms(stats.firstSoundDelay))"
+        line +=
+            " · first buffer \(ms(stats.firstBufferDelay)) · \(stats.buffers) buffers · \(stats.inputFrames) frames"
         if stats.conversionFailures > 0 {
             line += " · \(stats.conversionFailures) conversion failures"
         }
@@ -184,11 +189,11 @@ package final class AudioCapture {
     }
 }
 
-// MARK: - WAV writer (for debugging M3 captures)
+// MARK: - WAV encoding and writer (for debugging captures and Phonon uploads)
 
-package enum WAVWriter {
-    /// Write Float32 mono samples as 16-bit PCM WAV to `path`.
-    package static func write(samples: [Float], sampleRate: Int, to path: String) throws {
+package enum WAVEncoder {
+    /// Encodes Float32 mono samples as a 16-bit PCM WAV in memory.
+    package static func data(samples: [Float], sampleRate: Int) -> Data {
         let bytesPerSample = 2
         let dataSize = samples.count * bytesPerSample
 
@@ -197,32 +202,40 @@ package enum WAVWriter {
         data.append(uint32LE(36 + UInt32(dataSize)))
         data.append(contentsOf: Array("WAVE".utf8))
         data.append(contentsOf: Array("fmt ".utf8))
-        data.append(uint32LE(16))                       // fmt chunk size
-        data.append(uint16LE(1))                        // PCM
-        data.append(uint16LE(1))                        // mono
+        data.append(uint32LE(16))
+        data.append(uint16LE(1))
+        data.append(uint16LE(1))
         data.append(uint32LE(UInt32(sampleRate)))
         data.append(uint32LE(UInt32(sampleRate * bytesPerSample)))
-        data.append(uint16LE(UInt16(bytesPerSample)))   // block align
-        data.append(uint16LE(16))                       // bits per sample
+        data.append(uint16LE(UInt16(bytesPerSample)))
+        data.append(uint16LE(16))
         data.append(contentsOf: Array("data".utf8))
         data.append(uint32LE(UInt32(dataSize)))
 
-        for s in samples {
-            let clamped = max(-1.0, min(1.0, s))
-            let i = Int16(clamped * 32767.0)
-            data.append(uint16LE(UInt16(bitPattern: i)))
+        for sample in samples {
+            let clamped = max(-1.0, min(1.0, sample))
+            let value = Int16(clamped * 32767.0)
+            data.append(uint16LE(UInt16(bitPattern: value)))
         }
-
-        try data.write(to: URL(fileURLWithPath: path))
+        return data
     }
 
-    private static func uint32LE(_ v: UInt32) -> Data {
-        var x = v.littleEndian
-        return Data(bytes: &x, count: 4)
+    private static func uint32LE(_ value: UInt32) -> Data {
+        var littleEndian = value.littleEndian
+        return Data(bytes: &littleEndian, count: 4)
     }
-    private static func uint16LE(_ v: UInt16) -> Data {
-        var x = v.littleEndian
-        return Data(bytes: &x, count: 2)
+
+    private static func uint16LE(_ value: UInt16) -> Data {
+        var littleEndian = value.littleEndian
+        return Data(bytes: &littleEndian, count: 2)
+    }
+}
+
+package enum WAVWriter {
+    /// Write Float32 mono samples as 16-bit PCM WAV to `path`.
+    package static func write(samples: [Float], sampleRate: Int, to path: String) throws {
+        try WAVEncoder.data(samples: samples, sampleRate: sampleRate)
+            .write(to: URL(fileURLWithPath: path))
     }
 }
 

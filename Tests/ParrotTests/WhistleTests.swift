@@ -8,8 +8,7 @@ final class WhistleTests: XCTestCase {
     func testRegistry() {
         XCTAssertEqual(whistle.engine, .whistle)
         XCTAssertEqual(whistle.cactArtifact, "whistle.cact")
-        XCTAssertTrue(whistle.recommended)
-        XCTAssertEqual(ModelRegistry.recommended()?.id, "whistle")
+        XCTAssertFalse(whistle.recommended)
         XCTAssertTrue(whistle.isMultilingual)
         XCTAssertEqual(
             whistle.supportedLanguages,
