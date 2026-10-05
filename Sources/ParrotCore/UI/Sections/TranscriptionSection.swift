@@ -32,8 +32,17 @@ struct TranscriptionSection: View {
                 }
                 Spacer()
                 PillMenu(title: selectedModel.map(Self.menuTitle) ?? "None") {
-                    modelGroup("English", ModelRegistry.shared.filter { !$0.isMultilingual })
-                    modelGroup("Multilingual", ModelRegistry.shared.filter(\.isMultilingual))
+                    modelGroup("Whistle", ModelRegistry.shared.filter { $0.engine == .whistle })
+                    modelGroup(
+                        "English",
+                        ModelRegistry.shared.filter {
+                            $0.engine == .whisperKit && !$0.isMultilingual
+                        })
+                    modelGroup(
+                        "Multilingual",
+                        ModelRegistry.shared.filter {
+                            $0.engine == .whisperKit && $0.isMultilingual
+                        })
                 }
             }
 
@@ -66,13 +75,15 @@ struct TranscriptionSection: View {
     private func modelGroup(_ title: String, _ models: [TranscriptionModel]) -> some View {
         Section(title) {
             ForEach(models.sorted { $0.sizeMB < $1.sizeMB }, id: \.id) { model in
-                Toggle(isOn: Binding(
-                    get: { selectedModel?.id == model.id },
-                    set: { on in if on { store.update { $0.model.id = model.id } } }
-                )) {
+                Toggle(
+                    isOn: Binding(
+                        get: { selectedModel?.id == model.id },
+                        set: { on in if on { store.update { $0.model.id = model.id } } }
+                    )
+                ) {
                     // A model not on the Mac yet downloads when chosen; the
                     // arrow says so without words.
-                    if WhisperKitTranscriber.isCached(model) {
+                    if TranscriberFactory.isCached(model) {
                         Text(Self.shortName(model))
                     } else {
                         Label(Self.shortName(model), systemImage: "arrow.down.circle")
@@ -101,13 +112,22 @@ struct TranscriptionSection: View {
         "whisper-small.en": "More accurate, slower",
         "whisper-small": "Fast",
         "whisper-large-v3-turbo": "Most accurate, slowest",
+        "whistle": "Fastest, smallest",
     ]
 
     /// "Fastest · English only · 145 MB". Not shown while the model loads:
     /// the progress line under the menu says that instead.
     private func summary(_ model: TranscriptionModel) -> String {
-        let languages = model.isMultilingual ? "99 languages" : "English only"
-        let size = model.sizeMB >= 1000
+        let languages: String
+        if model.engine == .whistle {
+            languages = "7 languages"
+        } else if model.isMultilingual {
+            languages = "99 languages"
+        } else {
+            languages = "English only"
+        }
+        let size =
+            model.sizeMB >= 1000
             ? String(format: "%.1f GB", Double(model.sizeMB) / 1000)
             : "\(model.sizeMB) MB"
         return [Self.tradeOff[model.id], languages, size]
@@ -138,7 +158,9 @@ struct TranscriptionSection: View {
 
         if !multilingual, let model = selectedModel {
             let only = SpokenLanguage.displayName(model.languages.first ?? "en")
-            caption("\(model.displayName) hears \(only) only; choose a multilingual model to set a language.")
+            caption(
+                "\(model.displayName) hears \(only) only; choose a multilingual model to set a language."
+            )
         } else if store.current.language.code == nil {
             PillRow("Languages") {
                 SpokenLanguagesButton(store: store)
@@ -147,10 +169,12 @@ struct TranscriptionSection: View {
     }
 
     private func languageToggle(_ name: String, _ code: String?, selected: String?) -> some View {
-        Toggle(name, isOn: Binding(
-            get: { selected == code },
-            set: { on in if on { store.update { $0.language.code = code } } }
-        ))
+        Toggle(
+            name,
+            isOn: Binding(
+                get: { selected == code },
+                set: { on in if on { store.update { $0.language.code = code } } }
+            ))
     }
 
     /// Opens the dictionary in the default plain-text editor, creating it
@@ -160,14 +184,20 @@ struct TranscriptionSection: View {
     /// file opens instead, so the problem can be fixed and nothing is left
     /// behind by a new template.
     private static func openDictionary() {
-        let unconverted = Paths.fileType(Paths.dictionaryFile.path) == nil
+        let unconverted =
+            Paths.fileType(Paths.dictionaryFile.path) == nil
             && Paths.fileType(Paths.legacyDictionaryFile.path) != nil
         let file = unconverted ? Paths.legacyDictionaryFile : Paths.dictionaryFile
         if !unconverted { DictionaryStore(file: file).createIfMissing() }
-        let editor = NSWorkspace.shared.urlForApplication(toOpen: UTType.plainText)
+        let editor =
+            NSWorkspace.shared.urlForApplication(toOpen: UTType.plainText)
             ?? URL(fileURLWithPath: "/System/Applications/TextEdit.app")
-        NSWorkspace.shared.open([file], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-            if let error { Log.warning("couldn't open \(file.path): \(error.localizedDescription)") }
+        NSWorkspace.shared.open(
+            [file], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration()
+        ) { _, error in
+            if let error {
+                Log.warning("couldn't open \(file.path): \(error.localizedDescription)")
+            }
         }
     }
 
@@ -190,8 +220,12 @@ private struct SpokenLanguagesButton: View {
     }
 
     var body: some View {
-        Button { isOpen.toggle() } label: {
-            PillLabel(title: Onboarding.summary(spoken.map { SpokenLanguage.displayName($0) }), chevron: true)
+        Button {
+            isOpen.toggle()
+        } label: {
+            PillLabel(
+                title: Onboarding.summary(spoken.map { SpokenLanguage.displayName($0) }),
+                chevron: true)
         }
         .buttonStyle(.plain)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
@@ -205,14 +239,18 @@ private struct SpokenLanguagesList: View {
     @ObservedObject var store: SettingsStore
 
     var body: some View {
-        let spoken = store.current.language.spokenOrPreferred.filter(SpokenLanguage.whisperLanguages.contains)
-        LanguageChecklist(ticked: spoken, toggle: { code in
-            var next = spoken.filter { $0 != code }
-            if !spoken.contains(code) { next.append(code) }
-            // Keep at least one: an empty list trusts nothing.
-            guard !next.isEmpty else { return }
-            store.update { $0.language.spoken = next }
-        }) {
+        let spoken = store.current.language.spokenOrPreferred.filter(
+            SpokenLanguage.whisperLanguages.contains)
+        LanguageChecklist(
+            ticked: spoken,
+            toggle: { code in
+                var next = spoken.filter { $0 != code }
+                if !spoken.contains(code) { next.append(code) }
+                // Keep at least one: an empty list trusts nothing.
+                guard !next.isEmpty else { return }
+                store.update { $0.language.spoken = next }
+            }
+        ) {
             if store.current.language.spoken != nil {
                 Divider().padding(.vertical, 2)
                 Button("Use the Mac's Languages") { store.update { $0.language.spoken = nil } }

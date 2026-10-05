@@ -1,5 +1,5 @@
-import ApplicationServices
 import AVFoundation
+import ApplicationServices
 import Foundation
 
 /// Why the daemon could not start.
@@ -33,10 +33,13 @@ public enum StartupFailure: Error {
         case .microphoneDenied:
             return Self.permanent(
                 "microphone access denied",
-                fix: "run `parrot setup`, or enable parrot in System Settings → Privacy & Security → Microphone"
+                fix:
+                    "run `parrot setup`, or enable parrot in System Settings → Privacy & Security → Microphone"
             )
         case .unknownModel(let id):
-            return Self.permanent("unknown model: \(id)", fix: "pick one from `parrot models list` and update --model")
+            return Self.permanent(
+                "unknown model: \(id)", fix: "pick one from `parrot models list` and update --model"
+            )
         case .noModelsRegistered:
             return Self.permanent("no models registered", fix: "reinstall parrot")
         case .checksFailed:
@@ -44,7 +47,8 @@ public enum StartupFailure: Error {
         case .warmupFailed(let error):
             return "warmup failed: \(error)"
         case .hotkeyUnavailable(let error):
-            return "failed to register hotkey tap: \(error)\nrun `parrot setup` to configure permissions."
+            return
+                "failed to register hotkey tap: \(error)\nrun `parrot setup` to configure permissions."
         }
     }
 
@@ -60,10 +64,14 @@ enum Startup {
     /// Runs the startup checks and returns the model to load.
     /// Throws `StartupFailure`. `hotkey` is a `--hotkey` override, nil for
     /// the saved key; it decides whether the fn mapping is checked.
-    static func check(modelID: String?, hotkey: HotkeyKey? = nil, skipDoctor: Bool) throws -> TranscriptionModel {
+    static func check(modelID: String?, hotkey: HotkeyKey? = nil, skipDoctor: Bool) throws
+        -> TranscriptionModel
+    {
         // Agents installed before 0.0.6 log to /tmp until the plist is rewritten.
         if Paths.legacyTmpFiles.contains(where: { FileManager.default.fileExists(atPath: $0) }) {
-            Log.info("note: old parrot logs found in /tmp; run `parrot install --launch-at-login` again to remove them and log privately.")
+            Log.info(
+                "note: old parrot logs found in /tmp; run `parrot install --launch-at-login` again to remove them and log privately."
+            )
         }
 
         if !skipDoctor {
@@ -91,8 +99,10 @@ enum Startup {
 
         // Don't look in ~/Documents for an old cache: under launchd that read
         // is denied or prompts. Name the command that can migrate instead.
-        if !WhisperKitTranscriber.isCached(model) {
-            Log.info("\(model.id) not in \(Paths.appSupport.path), downloading. to reuse a copy from ~/Documents/huggingface, run `parrot setup` instead.")
+        if !TranscriberFactory.isCached(model) {
+            Log.info(
+                "\(model.id) not in \(Paths.appSupport.path), downloading. to reuse a copy from ~/Documents/huggingface, run `parrot setup` instead."
+            )
         }
 
         return model

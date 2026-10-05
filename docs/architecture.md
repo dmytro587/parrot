@@ -98,6 +98,9 @@ Sources/ParrotCore/
     Transcriber.swift           protocol and TranscriptionContext
     TranscriberTimings.swift    where a transcription spent its time, per stage
     WhisperKitTranscriber.swift
+    WhistleTranscriber.swift    Cactus Whistle via the Needle engine (`whistle.cact`)
+    NeedleRuntime.swift         serializes the process-global Needle C API
+    TranscriberFactory.swift    picks the engine from `TranscriptionModel.engine`
     WhisperTuning.swift         compute units and decoding options, each measured with `parrot-bench transcription`
     SpokenLanguage.swift        the language each dictation decodes in: the setting, or detection among the user's languages (pure, tested)
     LanguageDetector.swift      Whisper's language detection with only the user's languages competing

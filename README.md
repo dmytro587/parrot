@@ -46,6 +46,7 @@ Add your names and technical terms to `~/.config/parrot/dictionary`, a plain-tex
 | `parrot install --cli` | Link `/usr/local/bin/parrot` to Parrot.app |
 | `parrot install --uninstall` | Stop launching at login and remove logs |
 | `parrot models list` | List available models |
+| `parrot --model whistle` | Cactus Whistle (17 MB, 7 languages, CPU) |
 | `parrot --model whisper-large-v3-turbo` | Larger, multilingual model |
 | `parrot --hotkey right-option` | Use another key for this run only; Settings… changes the saved key |
 | `parrot --no-overlay` | Hide the recording pill |
@@ -53,11 +54,12 @@ Add your names and technical terms to `~/.config/parrot/dictionary`, a plain-tex
 
 ## 5. How it works
 
-WhisperKit runs Whisper on the Apple Neural Engine via CoreML, AVAudioEngine captures the mic, a CGEventTap watches the hotkey, and a synthesized ⌘V pastes the result. Nothing leaves your Mac, and logs never contain what you said. See [docs/architecture.md](docs/architecture.md).
+Transcription uses Whisper (WhisperKit on the Apple Neural Engine) or [Whistle](https://cactuscompute.com/blog/whistle) (Cactus Needle, on-device CPU). AVAudioEngine captures the mic, a CGEventTap watches the hotkey, and a synthesized ⌘V pastes the result. Nothing leaves your Mac, and logs never contain what you said. See [docs/architecture.md](docs/architecture.md).
 
 ## 6. Build from source
 
 ```sh
+scripts/fetch-needle.sh   # Whistle STT: vendored Needle engine (macOS arm64)
 swift build -c release && swift test
 scripts/dev-install.sh      # build, sign, install Parrot.app, link the CLI
 ```
