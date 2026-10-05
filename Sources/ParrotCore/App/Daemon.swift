@@ -203,6 +203,14 @@ public enum Daemon {
         // unloaded transcriber. A failed load (offline first run) retries
         // with backoff rather than exiting: the login item does not relaunch.
         menuBar.setHotkeyHealth(.modelLoading)
+        if !AppLaunch.isApp {
+            Log.info("loading \(model.id)…")
+            if model.engine == .phonon {
+                Log.info(
+                    "Phonon-2: starting local fermion serve (often 30–60s). Parrot is running; wait for “hold … to dictate” before pressing the hotkey."
+                )
+            }
+        }
         Task { @MainActor in
             var retryDelay: UInt64 = 30
             while true {
@@ -219,7 +227,11 @@ public enum Daemon {
                 }
             }
             do {
-                try startHotkey(monitor, menuBar: menuBar) { event in
+                let readyLine =
+                    "model: \(model.id) · inject: \(options.injectMode.rawValue) · hold \(monitor.key.shortName) to dictate · ^C to quit"
+                try startHotkey(
+                    monitor, menuBar: menuBar, cliReadyLine: AppLaunch.isApp ? nil : readyLine
+                ) { event in
                     controller.handle(event)
                 }
             } catch {
@@ -237,7 +249,6 @@ public enum Daemon {
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
-        Log.info("model: \(model.id) · inject: \(options.injectMode.rawValue) · ^C to quit")
         app.run()
     }
 
@@ -251,6 +262,7 @@ public enum Daemon {
     private static func startHotkey(
         _ monitor: HotkeyMonitor,
         menuBar: MenuBarController,
+        cliReadyLine: String? = nil,
         onEvent: @escaping @MainActor (HotkeyMonitor.Event) -> Void
     ) throws {
         func start() throws {
@@ -263,7 +275,11 @@ public enum Daemon {
                 throw StartupFailure.hotkeyUnavailable(error)
             }
             menuBar.setHotkeyHealth(.ok)
-            Log.info("listening on \(monitor.key.shortName) hold")
+            if let cliReadyLine, !AppLaunch.isApp {
+                Log.info(cliReadyLine)
+            } else {
+                Log.info("listening on \(monitor.key.shortName) hold")
+            }
         }
 
         if AXIsProcessTrusted() {

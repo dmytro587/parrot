@@ -58,8 +58,13 @@ package actor PhononServer {
 
     let startupTimeout = PhononConfiguration.defaultStartupTimeout
     let deadline = Date().addingTimeInterval(startupTimeout)
+    var lastStatusLog = Date.distantPast
 
     while Date() < deadline {
+      if Date().timeIntervalSince(lastStatusLog) >= 10 {
+        Log.info("starting fermion serve for \(modelID)…")
+        lastStatusLog = Date()
+      }
       if !child.isRunning, detectedPort == nil {
         stderrAccumulator.append(stderrPipe.fileHandleForReading.availableData)
         PhononSupport.saveServeDiagnostics(stderrAccumulator)
