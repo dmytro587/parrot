@@ -49,6 +49,7 @@ strip -x "$APP/Contents/MacOS/parrot"
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$(dirname "$BIN")/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
+cp packaging/parrot_fermion_boot.py "$APP/Contents/Resources/parrot_fermion_boot.py"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
@@ -60,27 +61,39 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # docs/assets/app-icon.png is the bird on a white rounded square, drawn by
 # scripts/make-app-icon.swift from docs/assets/icon.png.
+ICON_SRC="docs/assets/app-icon.png"
+if [ ! -f "$ICON_SRC" ]; then
+    echo "missing $ICON_SRC (run scripts/make-app-icon.swift or restore docs/assets/)" >&2
+    exit 1
+fi
+mkdir -p "$APP/Contents/Resources"
 ICONSET="$OUT/AppIcon.iconset"
 rm -rf "$ICONSET" && mkdir -p "$ICONSET"
 for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" docs/assets/app-icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+    sips -z "$size" "$size" "$ICON_SRC" --out "$ICONSET/icon_${size}x${size}.png"
     double=$((size * 2))
-    sips -z "$double" "$double" docs/assets/app-icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+    sips -z "$double" "$double" "$ICON_SRC" --out "$ICONSET/icon_${size}x${size}@2x.png"
 done
-iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+if ! iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"; then
+    echo "iconutil failed; check $ICONSET (PNG sizes must match iconset names)" >&2
+    exit 1
+fi
 rm -rf "$ICONSET"
 
 TIMESTAMP="--timestamp"
 [ "${PARROT_TIMESTAMP:-}" = "none" ] && TIMESTAMP="--timestamp=none"
 
+ENTITLEMENTS="packaging/Parrot.entitlements"
 if [ -n "$IDENTITY" ]; then
     echo "→ signing as $IDENTITY"
     SIGN_AS="$IDENTITY"
 else
     echo "! no Developer ID Application identity; ad-hoc signing."
     echo "  Permissions will not survive the next build, and the app can't be notarized."
+    echo "  Using Parrot-adhoc.entitlements so Sparkle loads under Library Validation."
     SIGN_AS="-"
     TIMESTAMP="--timestamp=none"
+    ENTITLEMENTS="packaging/Parrot-adhoc.entitlements"
 fi
 
 # Inside-out: each nested bundle before the one that contains it, as in
@@ -96,7 +109,7 @@ for nested in \
         --sign "$SIGN_AS" "$nested"
 done
 codesign --force --options runtime $TIMESTAMP \
-    --entitlements packaging/Parrot.entitlements \
+    --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_AS" "$APP"
 
 codesign --verify --deep --strict --verbose=2 "$APP"

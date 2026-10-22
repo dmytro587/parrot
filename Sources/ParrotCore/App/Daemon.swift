@@ -116,6 +116,9 @@ public enum Daemon {
         OnboardingWindow.startIfNeeded(store: settings, menuBar: menuBar)
         // A model change loads behind the menu bar and swaps in between dictations (#43).
         let switcher = ModelSwitcher(model: model, transcriber: transcriber, menuBar: menuBar)
+        // `NSApp.delegate` is weak; keep the coordinator alive for the whole run loop.
+        let appTermination = AppTerminationCoordinator(switcher: switcher)
+        NSApp.delegate = appTermination
 
         // The dictionary (#33): converted once from dictionary.json, created
         // on first run, reloaded when it changes.

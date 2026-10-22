@@ -67,7 +67,40 @@ final class PhononDependencyInstallerTests: XCTestCase {
     }
 }
 
+final class PhononServeEnvironmentTests: XCTestCase {
+    func testApplySetsMemoryDefaultsWithoutOverridingUserEnv() throws {
+        var env: [String: String] = [
+            "FERMION_P2_FAST": "tdt16,dense16",
+            "PHONON_ENC": "q6g64",
+            "PARROT_PHONON_MLX_CACHE_LIMIT_MB": "128",
+        ]
+        try PhononServeEnvironment.apply(to: &env)
+        XCTAssertEqual(env["FERMION_P2_FAST"], "tdt16,dense16")
+        XCTAssertEqual(env["PHONON_ENC"], "q6g64")
+        XCTAssertEqual(env["PARROT_PHONON_MLX_CACHE_LIMIT_MB"], "128")
+        XCTAssertTrue(env["PYTHONPATH"]?.contains("phonon/python_boot") == true)
+    }
+
+    func testApplyFillsMissingKeys() throws {
+        var env = ["FERMION_CACHE_DIR": "/tmp/x"]
+        try PhononServeEnvironment.apply(to: &env)
+        XCTAssertEqual(env["FERMION_P2_FAST"], PhononServeEnvironment.defaultP2Fast)
+        XCTAssertEqual(env["PHONON_ENC"], PhononServeEnvironment.defaultPhononEnc)
+        XCTAssertEqual(env["PARROT_PHONON_MLX_CACHE_LIMIT_MB"], "256")
+        XCTAssertEqual(env["PARROT_PHONON_IDLE_SWEEP_SEC"], "45")
+    }
+}
+
 final class PhononSupportTests: XCTestCase {
+    func testParrotOwnedServeCommand() {
+        let owned =
+            "/Users/me/.local/bin/fermion serve phonon-2 --host 127.0.0.1 --port 0"
+        XCTAssertTrue(PhononSupport.isParrotOwnedServeCommand(owned))
+        XCTAssertFalse(
+            PhononSupport.isParrotOwnedServeCommand(
+                "fermion serve phonon-2 --host 0.0.0.0 --port 8000"))
+    }
+
     func testParseServePortFromFermionLine() {
         let line =
             "[fermion] serving FermionResearch/Phonon-2 (sha 98125795) on http://127.0.0.1:59280/v1"

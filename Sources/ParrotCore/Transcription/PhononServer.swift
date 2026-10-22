@@ -27,6 +27,7 @@ package actor PhononServer {
       return baseURL
     }
     await stop()
+    PhononSupport.reapOrphanedServeProcesses()
 
     guard PhononSupport.locateFermion() != nil else {
       throw PhononError.weightsMissing(Self.missingFermionMessage)
@@ -42,6 +43,7 @@ package actor PhononServer {
     var environment = ProcessInfo.processInfo.environment
     environment["FERMION_CACHE_DIR"] = cache.path
     environment["PYTHONUNBUFFERED"] = "1"
+    try PhononServeEnvironment.apply(to: &environment)
 
     let child = Process()
     child.executableURL = PhononSupport.locateFermion()
@@ -121,6 +123,7 @@ package actor PhononServer {
       baseURL = nil
       return
     }
+    let pid = process.processIdentifier
     if process.isRunning {
       process.terminate()
       let deadline = Date().addingTimeInterval(5)
@@ -129,6 +132,10 @@ package actor PhononServer {
       }
       if process.isRunning {
         process.interrupt()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+      }
+      if process.isRunning {
+        PhononSupport.terminateProcess(pid: pid)
       }
     }
     self.process = nil

@@ -34,6 +34,15 @@ final class ModelSwitcher {
         self.status = status ?? .shared
     }
 
+    /// Stops the active model and any load in progress. Used when Parrot exits so
+    /// a Parrot-owned `fermion serve` child does not keep running.
+    func shutdown() async {
+        generation += 1
+        load?.cancel()
+        load = nil
+        await transcriber.unload()
+    }
+
     /// Loads and swaps in `id`, a `ModelRegistry` id or nil for the
     /// recommended model.
     func select(_ id: String?) {

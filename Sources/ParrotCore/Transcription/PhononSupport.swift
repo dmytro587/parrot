@@ -70,6 +70,57 @@ package enum PhononSupport {
         return nil
     }
 
+    /// True when `command` looks like Parrot's loopback `fermion serve` child.
+    package static func isParrotOwnedServeCommand(_ command: String) -> Bool {
+        command.contains("fermion") && command.contains(" serve ")
+            && command.contains("--host 127.0.0.1") && command.contains("--port 0")
+    }
+
+    /// Ends `fermion serve` processes left over from earlier Parrot runs.
+    ///
+    /// Quitting Parrot does not reliably tear down the Python child; each relaunch
+    /// can leave another copy holding the MLX weights in memory.
+    package static func reapOrphanedServeProcesses(excludingPID: Int32? = nil) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-ax", "-o", "pid=,command="]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return }
+        let output =
+            String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(whereSeparator: \.isNewline) {
+            let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+            guard let space = trimmed.firstIndex(of: " ") else { continue }
+            let pidString = trimmed[..<space]
+            guard let pid = Int32(pidString), pid > 1 else { continue }
+            if let excludingPID, pid == excludingPID { continue }
+            let command = String(trimmed[space...]).trimmingCharacters(in: .whitespaces)
+            guard isParrotOwnedServeCommand(command) else { continue }
+            terminateProcess(pid: pid)
+            Log.info("phonon: ended leftover fermion serve (pid \(pid))")
+        }
+    }
+
+    package static func terminateProcess(pid: Int32) {
+        let killer = Process()
+        killer.executableURL = URL(fileURLWithPath: "/bin/kill")
+        killer.arguments = ["-TERM", String(pid)]
+        killer.standardOutput = FileHandle.nullDevice
+        killer.standardError = FileHandle.nullDevice
+        try? killer.run()
+        killer.waitUntilExit()
+        if killer.terminationStatus != 0 {
+            killer.executableURL = URL(fileURLWithPath: "/bin/kill")
+            killer.arguments = ["-KILL", String(pid)]
+            try? killer.run()
+            killer.waitUntilExit()
+        }
+    }
+
     /// When fermion stderr is buffered, discover the loopback port from the child process.
     package static func discoverListeningPort(processID: Int32) -> Int? {
         let process = Process()
